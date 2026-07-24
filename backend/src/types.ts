@@ -95,6 +95,8 @@ export interface VideoSpec {
   cta: SceneCopy;
   /** Absolute/relative URL of the recorded live segment, when present. */
   liveSegmentUrl?: string;
+  /** Backing track, synthesized per job at `bpm` so cuts land on its beat. */
+  musicUrl?: string;
   /**
    * Spoken lines, one per scene. Empty when no voice provider is configured —
    * the video then renders silent rather than failing.

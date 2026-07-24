@@ -111,6 +111,7 @@ function localizeProps(jobId: string, spec: VideoSpec, origin: string): VideoSpe
   return {
     ...spec,
     liveSegmentUrl: local(spec.liveSegmentUrl),
+    musicUrl: local(spec.musicUrl),
     narration: spec.narration?.map((line) => ({
       ...line,
       audioUrl: local(line.audioUrl) ?? line.audioUrl,

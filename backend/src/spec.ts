@@ -16,10 +16,18 @@ import type {
 
 const MAX_CARDS = 4;
 
+/** Trim to a whole word — cutting mid-word ("or qui...") looks like a bug. */
+function clamp(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).replace(/[,;:.\s]+$/, "")}…`;
+}
+
 function serviceCards(agent: AgentProfile): ServiceCard[] {
   return agent.services.slice(0, MAX_CARDS).map((s) => ({
     name: s.name,
-    description: s.description.length > 110 ? `${s.description.slice(0, 107)}...` : s.description,
+    description: clamp(s.description, 96),
     price: s.fee ? `$${Number(s.fee).toFixed(2)}` : "—",
   }));
 }

@@ -46,6 +46,7 @@ export const videoSpecSchema = z.object({
   services: z.array(serviceCardSchema),
   cta: sceneCopySchema,
   liveSegmentUrl: z.string().optional(),
+  musicUrl: z.string().optional(),
   narration: z.array(narrationLineSchema).optional(),
   bpm: z.number(),
   durationSec: z.number(),
@@ -72,7 +73,17 @@ export const SCENE_WEIGHTS = {
 export type SceneName = keyof typeof SCENE_WEIGHTS;
 
 /** Breathing room after a spoken line, mirroring the backend's VO_PAD_SEC. */
-const VO_PAD_SEC = 0.9;
+const VO_PAD_SEC = 0.55;
+
+/**
+ * Cuts are quantized to HALF bars, not whole ones.
+ *
+ * A whole bar at 112 BPM is 2.13s, so rounding a 3.4s line up to bars leaves
+ * almost three seconds of nothing happening — which is exactly what made the
+ * first cut feel slow. Half bars still land on the beat while cutting the worst
+ * case slack to about a second.
+ */
+const QUANTIZE_BEATS = 2;
 
 /**
  * Scene lengths in frames.
@@ -89,9 +100,9 @@ const VO_PAD_SEC = 0.9;
  * so the video never sits on a dead gap.
  */
 export function sceneFrames(spec: VideoSpec): Record<SceneName, number> {
-  const barFrames = Math.round((60 / spec.bpm) * 4 * FPS);
+  const unit = Math.round((60 / spec.bpm) * QUANTIZE_BEATS * FPS);
   const snapUp = (frames: number): number =>
-    Math.max(barFrames, Math.ceil(frames / barFrames) * barFrames);
+    Math.max(unit * 2, Math.ceil(frames / unit) * unit);
 
   const hasLive = !!spec.liveSegmentUrl;
   const out = {} as Record<SceneName, number>;
@@ -106,7 +117,7 @@ export function sceneFrames(spec: VideoSpec): Record<SceneName, number> {
       }
       const sec = spoken.get(key);
       // A scene nobody narrates still needs to breathe: give it one bar.
-      out[key] = sec ? snapUp(Math.round((sec + VO_PAD_SEC) * FPS)) : barFrames;
+      out[key] = sec ? snapUp(Math.round((sec + VO_PAD_SEC) * FPS)) : unit * 2;
     }
     return out;
   }

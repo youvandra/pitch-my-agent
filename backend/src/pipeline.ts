@@ -6,6 +6,7 @@ import { fetchAgent } from "./okx.js";
 import { buildPalette } from "./palette.js";
 import { buildSpec, buildScript } from "./spec.js";
 import { synthesizeNarration } from "./voice.js";
+import { writeMusic } from "./music.js";
 import { renderVideo } from "./render.js";
 import { setStage, completeJob, failJob, getJob } from "./store.js";
 import type { Delivery, GeneratePitchInput, NarrationLine, VisualStyle } from "./types.js";
@@ -33,7 +34,9 @@ function publicUrl(jobId: string, file: string): string {
 }
 
 /** Breathing room around a spoken line, so narration never butts into a cut. */
-const VO_PAD_SEC = 0.9;
+const VO_PAD_SEC = 0.55;
+/** Cuts snap to half bars — see sceneFrames() in video/src/schema.ts. */
+const QUANTIZE_BEATS = 2;
 /** Must match FPS in video/src/schema.ts. */
 const FPS = 30;
 
@@ -47,10 +50,10 @@ const FPS = 30;
  * it describes.
  */
 function totalWithNarration(bpm: number, narration: NarrationLine[]): number {
-  const barFrames = Math.round((60 / bpm) * 4 * FPS);
+  const unit = Math.round((60 / bpm) * QUANTIZE_BEATS * FPS);
   const frames = narration.reduce((sum, line) => {
     const needed = Math.round((line.durationSec + VO_PAD_SEC) * FPS);
-    return sum + Math.max(barFrames, Math.ceil(needed / barFrames) * barFrames);
+    return sum + Math.max(unit * 2, Math.ceil(needed / unit) * unit);
   }, 0);
   return frames / FPS;
 }
@@ -101,6 +104,15 @@ export async function runPipeline(jobId: string, input: GeneratePitchInput, tier
         // make the delivery disagree with the file.
         spec.durationSec = totalWithNarration(spec.bpm, narration);
       }
+    }
+
+    // The bed is generated last, because it has to be exactly as long as the
+    // finished edit — which is only known once narration has set the pacing.
+    try {
+      const file = writeMusic(jobId, spec.durationSec, spec.bpm, `${agent.agentId}:${style}`);
+      spec.musicUrl = publicUrl(jobId, file);
+    } catch (err) {
+      console.error(`music synthesis failed for job ${jobId}, rendering without it:`, err);
     }
 
     setStage(jobId, "rendering");

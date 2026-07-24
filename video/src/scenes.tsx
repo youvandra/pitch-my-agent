@@ -1,80 +1,132 @@
 import React from "react";
-import { OffthreadVideo } from "remotion";
-import type { SceneCopy, VideoSpec } from "./schema";
-import { Avatar, BrowserFrame, Eyebrow, H1, Pop, Rise, ServiceRow, Stage, Sub } from "./ui";
+import { OffthreadVideo, interpolate, useCurrentFrame } from "remotion";
+import type { VideoSpec } from "./schema";
+import {
+  A,
+  AgentCard,
+  Avatar,
+  BlurIn,
+  BrowserFrame,
+  Bubble,
+  Eyebrow,
+  H1,
+  MaskLine,
+  Pop,
+  ServiceRow,
+  Stage,
+  Swipe,
+} from "./ui";
 
 // Every scene is a pure function of the spec — no hardcoded copy or colors.
-// That is what makes one fixed template serve any agent.
+// That is what lets one fixed template serve any agent.
+//
+// The scenes deliberately do NOT share a layout. A deck of identical
+// title-and-paragraph slides reads as a template no matter how good the copy is,
+// so each beat gets its own composition and its own visual device: a portrait, a
+// staged conversation, a product card, a price list, a screen recording. Copy
+// appears only where it earns its place — some scenes are a single line.
 
 interface SceneProps {
   spec: VideoSpec;
 }
 
-/** Shared layout for the three copy-driven scenes. */
-const CopyScene: React.FC<{ spec: VideoSpec; copy: SceneCopy; size?: number }> = ({ spec, copy, size }) => (
-  <Stage theme={spec.theme}>
-    <div style={{ textAlign: "center", maxWidth: 1400 }}>
-      {copy.eyebrow ? (
-        <Rise delay={2}>
-          <Eyebrow theme={spec.theme}>{copy.eyebrow}</Eyebrow>
-        </Rise>
-      ) : null}
-      <Rise delay={8}>
-        <H1 theme={spec.theme} size={size}>
-          {copy.headline}
-        </H1>
-      </Rise>
-      {copy.sub ? (
-        <Rise delay={18}>
-          <Sub theme={spec.theme}>{copy.sub}</Sub>
-        </Rise>
-      ) : null}
-    </div>
-  </Stage>
-);
-
+/** 1 · HOOK — centred portrait. Who this is, nothing else. */
 export const SceneHook: React.FC<SceneProps> = ({ spec }) => (
-  <Stage theme={spec.theme}>
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
-      <Pop delay={2}>
-        <Avatar theme={spec.theme} url={spec.avatarUrl} name={spec.agentName} size={190} />
-      </Pop>
-      <div style={{ marginTop: 44 }}>
-        <Rise delay={14}>
-          <Eyebrow theme={spec.theme}>{spec.hook.eyebrow ?? "On OKX.ai"}</Eyebrow>
-        </Rise>
-        <Rise delay={20}>
-          <H1 theme={spec.theme}>{spec.hook.headline}</H1>
-        </Rise>
-        {spec.hook.sub ? (
-          <Rise delay={30}>
-            <Sub theme={spec.theme}>{spec.hook.sub}</Sub>
-          </Rise>
-        ) : null}
-      </div>
+  <Stage theme={spec.theme} align="center">
+    <Pop delay={1}>
+      <Avatar theme={spec.theme} url={spec.avatarUrl} name={spec.agentName} size={196} />
+    </Pop>
+    <div style={{ marginTop: 46 }}>
+      <Eyebrow theme={spec.theme} delay={10}>
+        {spec.hook.eyebrow ?? "On OKX.ai"}
+      </Eyebrow>
+      <MaskLine delay={16}>
+        <H1 theme={spec.theme} size={124}>
+          {spec.agentName}
+        </H1>
+      </MaskLine>
     </div>
   </Stage>
-);
-
-export const SceneProblem: React.FC<SceneProps> = ({ spec }) => (
-  <CopyScene spec={spec} copy={spec.problem} />
-);
-
-export const SceneReveal: React.FC<SceneProps> = ({ spec }) => (
-  <CopyScene spec={spec} copy={spec.reveal} />
 );
 
 /**
- * The live segment: a real recording of the agent being paid and called. This is
- * the differentiator — it only renders when the pipeline produced a clip.
+ * 2 · PROBLEM — staged conversation, left aligned.
+ *
+ * Showing the wall an agent runs into lands harder than describing it, so this
+ * beat is played out as messages rather than a paragraph.
+ */
+export const SceneProblem: React.FC<SceneProps> = ({ spec }) => {
+  const frame = useCurrentFrame();
+  return (
+    <Stage theme={spec.theme} align="left">
+      <Eyebrow theme={spec.theme} delay={2}>
+        {spec.problem.eyebrow ?? "The problem"}
+      </Eyebrow>
+      <MaskLine delay={8}>
+        <H1 theme={spec.theme} size={92}>
+          {spec.problem.headline}
+        </H1>
+      </MaskLine>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 18,
+          width: 1180,
+          marginTop: 46,
+          alignItems: "stretch",
+        }}
+      >
+        <BlurIn delay={26} y={16}>
+          <Bubble theme={spec.theme} from="user">
+            Can you handle this for me?
+          </Bubble>
+        </BlurIn>
+        <BlurIn delay={40} y={16}>
+          <Bubble theme={spec.theme} from="agent">
+            <span style={{ opacity: interpolate(frame, [40, 56], [0.4, 1], { extrapolateRight: "clamp" }) }}>
+              I can't do that on my own.
+            </span>
+          </Bubble>
+        </BlurIn>
+      </div>
+    </Stage>
+  );
+};
+
+/** 3 · REVEAL — the product shot. The marketplace card, centred, popped in. */
+export const SceneReveal: React.FC<SceneProps> = ({ spec }) => (
+  <Stage theme={spec.theme} align="center">
+    <Eyebrow theme={spec.theme} delay={2}>
+      {spec.reveal.eyebrow ?? "Meet"}
+    </Eyebrow>
+    <Pop delay={10} from={0.9}>
+      <AgentCard
+        theme={spec.theme}
+        name={spec.agentName}
+        agentId={spec.agentId}
+        avatarUrl={spec.avatarUrl}
+        tagline={spec.tagline}
+        serviceCount={spec.services.length}
+      />
+    </Pop>
+    <BlurIn delay={30}>
+      <div style={{ fontSize: 32, color: spec.theme.muted, marginTop: 34 }}>{spec.reveal.sub}</div>
+    </BlurIn>
+  </Stage>
+);
+
+/**
+ * 4 · LIVE — the recording, framed as a browser. Text stays out of the way here;
+ * the footage is the point.
  */
 export const SceneLive: React.FC<SceneProps> = ({ spec }) => (
-  <Stage theme={spec.theme}>
-    <div style={{ width: "100%", maxWidth: 1560 }}>
-      <Rise delay={2}>
-        <Eyebrow theme={spec.theme}>Live · paid over x402</Eyebrow>
-      </Rise>
-      <Rise delay={10}>
+  <Stage theme={spec.theme} align="center">
+    <Eyebrow theme={spec.theme} delay={2}>
+      Live · paid over x402
+    </Eyebrow>
+    <BlurIn delay={8} y={26}>
+      <div style={{ width: 1560 }}>
         <BrowserFrame theme={spec.theme}>
           {spec.liveSegmentUrl ? (
             <OffthreadVideo src={spec.liveSegmentUrl} style={{ width: "100%", display: "block" }} />
@@ -82,49 +134,47 @@ export const SceneLive: React.FC<SceneProps> = ({ spec }) => (
             <div style={{ height: 620 }} />
           )}
         </BrowserFrame>
-      </Rise>
-    </div>
+      </div>
+    </BlurIn>
   </Stage>
 );
 
+/** 5 · SERVICES — the price list, built one row at a time, left aligned. */
 export const SceneServices: React.FC<SceneProps> = ({ spec }) => (
-  <Stage theme={spec.theme}>
-    <div style={{ width: "100%", maxWidth: 1360 }}>
-      <Rise delay={2}>
-        <Eyebrow theme={spec.theme}>Services</Eyebrow>
-      </Rise>
-      <div style={{ display: "flex", flexDirection: "column", gap: 22, marginTop: 12 }}>
-        {spec.services.map((s, i) => (
-          <Rise key={`${s.name}-${i}`} delay={10 + i * 8}>
-            <ServiceRow theme={spec.theme} name={s.name} description={s.description} price={s.price} />
-          </Rise>
-        ))}
-      </div>
+  <Stage theme={spec.theme} align="left">
+    <Eyebrow theme={spec.theme} delay={2}>
+      What it sells
+    </Eyebrow>
+    <div style={{ display: "flex", flexDirection: "column", gap: 18, width: 1400, marginTop: 6 }}>
+      {spec.services.map((s, i) => (
+        <BlurIn key={`${s.name}-${i}`} delay={8 + i * 9} y={22}>
+          <ServiceRow
+            theme={spec.theme}
+            name={s.name}
+            description={s.description}
+            price={s.price}
+            index={i}
+          />
+        </BlurIn>
+      ))}
     </div>
   </Stage>
 );
 
+/** 6 · CTA — one line, centred, with the id an agent actually needs. */
 export const SceneCta: React.FC<SceneProps> = ({ spec }) => (
-  <Stage theme={spec.theme}>
-    <div style={{ textAlign: "center" }}>
-      <Pop delay={2}>
-        <Avatar theme={spec.theme} url={spec.avatarUrl} name={spec.agentName} size={130} />
-      </Pop>
-      <div style={{ marginTop: 36 }}>
-        <Rise delay={12}>
-          <Eyebrow theme={spec.theme}>{spec.cta.eyebrow ?? "Try it"}</Eyebrow>
-        </Rise>
-        <Rise delay={18}>
-          <H1 theme={spec.theme} size={92}>
-            {spec.cta.headline}
-          </H1>
-        </Rise>
-        {spec.cta.sub ? (
-          <Rise delay={26}>
-            <Sub theme={spec.theme}>{spec.cta.sub}</Sub>
-          </Rise>
-        ) : null}
-      </div>
-    </div>
+  <Stage theme={spec.theme} align="center">
+    <Eyebrow theme={spec.theme} delay={2}>
+      {spec.cta.eyebrow ?? "Try it"}
+    </Eyebrow>
+    <MaskLine delay={8}>
+      <H1 theme={spec.theme} size={128}>
+        Agent <A theme={spec.theme}>#{spec.agentId}</A>
+      </H1>
+    </MaskLine>
+    <Swipe theme={spec.theme} delay={26} width={420} />
+    <BlurIn delay={32}>
+      <div style={{ fontSize: 34, color: spec.theme.muted, marginTop: 30 }}>on OKX.ai</div>
+    </BlurIn>
   </Stage>
 );

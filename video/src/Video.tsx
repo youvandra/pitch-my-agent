@@ -35,6 +35,9 @@ export const Video: React.FC<VideoSpec> = (spec) => {
 
   return (
     <AbsoluteFill style={{ background: spec.theme.bg }}>
+      {/* Music runs the whole length, well under the voice: it carries the pulse
+          the cuts are quantized to, it should never compete with narration. */}
+      {spec.musicUrl ? <Audio src={spec.musicUrl} volume={0.22} /> : null}
       {ORDER.map((name) => {
         const dur = frames[name];
         // A zero-length scene (e.g. no live segment) is skipped entirely.
