@@ -513,23 +513,94 @@ export const OkxMark: React.FC<{ width?: number; opacity?: number }> = ({ width 
   />
 );
 
-/** Browser chrome around the recorded live segment, so it reads as real usage. */
-export const BrowserFrame: React.FC<{ theme: Palette; children: React.ReactNode }> = ({ theme, children }) => (
-  <div
-    style={{
-      width: "100%",
-      borderRadius: 18,
-      overflow: "hidden",
-      border: `1px solid ${theme.primary}44`,
-      background: "#000",
-      boxShadow: `0 50px 120px -50px #000`,
-    }}
-  >
-    <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "14px 18px", background: theme.bg2 }}>
-      {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
-        <div key={c} style={{ width: 13, height: 13, borderRadius: 7, background: c }} />
-      ))}
+/**
+ * Laptop mockup that frames the live recording.
+ *
+ * The recording is not the whole scene — it is an object sitting on the same
+ * branded stage as every other slide, so the live segment belongs to the pitch
+ * instead of interrupting it. The screen carries a slim browser bar (the capture
+ * is chrome-less page content, so the chrome is drawn here), and a base gives it
+ * enough weight to read as a device rather than a floating rectangle.
+ *
+ * `width` is the screen width; the deck extends a little wider below it.
+ */
+export const LaptopMockup: React.FC<{ theme: Palette; width?: number; children: React.ReactNode }> = ({
+  theme,
+  width = 1180,
+  children,
+}) => {
+  const screenHeight = Math.round((width * 10) / 16);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+      {/* screen */}
+      <div
+        style={{
+          width,
+          borderRadius: 16,
+          padding: 12,
+          background: `linear-gradient(180deg, #1b1f27, #0c0e13)`,
+          border: `1px solid ${theme.primary}33`,
+          boxShadow: `0 60px 130px -50px #000, 0 0 70px -40px ${theme.primary}55`,
+        }}
+      >
+        <div style={{ borderRadius: 9, overflow: "hidden", background: "#000" }}>
+          {/* slim browser bar */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+              padding: "11px 16px",
+              background: theme.bg2,
+            }}
+          >
+            <div style={{ display: "flex", gap: 8 }}>
+              {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
+                <div key={c} style={{ width: 12, height: 12, borderRadius: 6, background: c }} />
+              ))}
+            </div>
+            <div
+              style={{
+                flex: 1,
+                fontFamily: FONT_MONO,
+                fontSize: 18,
+                color: theme.muted,
+                background: theme.bg,
+                borderRadius: 8,
+                padding: "6px 14px",
+              }}
+            >
+              okx.ai
+            </div>
+          </div>
+          <div style={{ width: "100%", height: screenHeight, overflow: "hidden" }}>{children}</div>
+        </div>
+      </div>
+      {/* deck / hinge */}
+      <div
+        style={{
+          width: width + 130,
+          height: 22,
+          marginTop: -1,
+          borderRadius: "0 0 16px 16px",
+          background: `linear-gradient(180deg, #23272f, #14171d)`,
+          boxShadow: `0 24px 40px -20px #000`,
+          position: "relative",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 150,
+            height: 8,
+            borderRadius: "0 0 8px 8px",
+            background: "#0c0e13",
+          }}
+        />
+      </div>
     </div>
-    {children}
-  </div>
-);
+  );
+};

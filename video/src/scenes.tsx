@@ -6,8 +6,8 @@ import {
   AgentCard,
   Avatar,
   BlurIn,
-  BrowserFrame,
   Bubble,
+  LaptopMockup,
   Eyebrow,
   H1,
   MaskLine,
@@ -118,45 +118,32 @@ export const SceneReveal: React.FC<SceneProps> = ({ spec }) => (
 );
 
 /**
- * 4 · LIVE — the recording, framed as a browser.
+ * 4 · LIVE — the recording, framed as a laptop on the same stage.
  *
- * The footage is the point, so the copy stays out of the way. A slow push in
- * does the work a manual zoom would: screen recordings are wide and detail-poor
- * at 1080p, and drifting closer keeps the eye moving and the UI legible without
- * having to fight the page's own zoom during capture.
+ * No zoom or push-in: the earlier version fought the footage, and a screen
+ * recording reads best held still. It sits as a device on the branded
+ * background, like every other scene's centrepiece, so the live proof belongs to
+ * the pitch rather than taking it over.
  */
-export const SceneLive: React.FC<SceneProps> = ({ spec }) => {
-  const frame = useCurrentFrame();
-  const scale = interpolate(frame, [0, 240], [1, 1.14], { extrapolateRight: "clamp" });
-  const originY = interpolate(frame, [0, 240], [38, 46], { extrapolateRight: "clamp" });
-
-  return (
-    <Stage theme={spec.theme} align="center">
-      <Eyebrow theme={spec.theme} delay={2}>
-        Live on OKX.ai
-      </Eyebrow>
-      <BlurIn delay={8} y={26}>
-        <div style={{ width: 1560, overflow: "hidden", borderRadius: 18 }}>
-          <BrowserFrame theme={spec.theme}>
-            {spec.liveSegmentUrl ? (
-              <OffthreadVideo
-                src={spec.liveSegmentUrl}
-                style={{
-                  width: "100%",
-                  display: "block",
-                  transform: `scale(${scale})`,
-                  transformOrigin: `50% ${originY}%`,
-                }}
-              />
-            ) : (
-              <div style={{ height: 620 }} />
-            )}
-          </BrowserFrame>
-        </div>
-      </BlurIn>
-    </Stage>
-  );
-};
+export const SceneLive: React.FC<SceneProps> = ({ spec }) => (
+  <Stage theme={spec.theme} align="center">
+    <Eyebrow theme={spec.theme} delay={2}>
+      Live on OKX.ai
+    </Eyebrow>
+    <Pop delay={8} from={0.92}>
+      <LaptopMockup theme={spec.theme} width={1180}>
+        {spec.liveSegmentUrl ? (
+          <OffthreadVideo
+            src={spec.liveSegmentUrl}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+        ) : (
+          <div style={{ width: "100%", height: "100%" }} />
+        )}
+      </LaptopMockup>
+    </Pop>
+  </Stage>
+);
 
 /** 5 · SERVICES — the price list, built one row at a time, left aligned. */
 export const SceneServices: React.FC<SceneProps> = ({ spec }) => (
