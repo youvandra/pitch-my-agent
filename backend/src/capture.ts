@@ -22,6 +22,33 @@ import { config } from "./config.js";
 
 const MARKETPLACE_URL = "https://okx.ai";
 
+/**
+ * Resolve the avfoundation index of the screen-capture device.
+ *
+ * The index is NOT stable: avfoundation enumerates cameras and mics first, and
+ * their order shifts between runs, so a hardcoded number silently starts filming
+ * a webcam — or a device that makes ffmpeg hang. Parsing `-list_devices` for the
+ * "Capture screen" line each time is the only reliable way.
+ */
+function resolveScreenIndex(): Promise<string> {
+  return new Promise((resolve) => {
+    const probe = spawn(config.ffmpegBin, ["-f", "avfoundation", "-list_devices", "true", "-i", ""]);
+    let out = "";
+    probe.stderr?.on("data", (d) => (out += String(d)));
+    probe.on("close", () => {
+      const line = out.split("\n").find((l) => /capture screen/i.test(l));
+      const match = line?.match(/\[(\d+)\]\s*Capture screen/i);
+      if (match) {
+        resolve(match[1]);
+      } else {
+        console.warn(`could not find a screen device in avfoundation list; using CAPTURE_SCREEN_INDEX=${config.captureScreenIndex}`);
+        resolve(config.captureScreenIndex);
+      }
+    });
+    probe.on("error", () => resolve(config.captureScreenIndex));
+  });
+}
+
 export interface CaptureResult {
   /** Filename inside the job directory. */
   file: string;
@@ -29,14 +56,15 @@ export interface CaptureResult {
 }
 
 /** Start recording the whole screen. Returns a stop function. */
-function startScreenRecording(outPath: string): { stop: () => Promise<void> } {
+function startScreenRecording(outPath: string, screenIndex: string): { stop: () => Promise<void> } {
   // `-r 30` matches the composition frame rate so the clip drops straight in.
+  // No -capture_cursor: it hangs on the current ffmpeg build, and a demo does not
+  // need the pointer drawn.
   const args = [
     "-y",
     "-f", "avfoundation",
-    "-capture_cursor", "1",
     "-framerate", "30",
-    "-i", `${config.captureScreenIndex}:none`,
+    "-i", `${screenIndex}:none`,
     "-vf", "scale=1920:-2,format=yuv420p",
     "-r", "30",
     outPath,
@@ -102,16 +130,21 @@ export async function captureLiveProof(
     return null;
   }
 
-  // Kiosk / fullscreen: ffmpeg films the whole display, so the browser has to
-  // own the whole display — otherwise the recording captures the desktop behind
-  // it (other windows, the dock, the permission dialog). Kiosk also hides the
-  // tab bar and address bar, which read as "someone's dev machine" rather than
-  // "the product".
+  // --start-maximized, NOT --kiosk/--start-fullscreen.
+  //
+  // On macOS, native fullscreen (kiosk / start-fullscreen) moves the window to
+  // its own Space, and avfoundation only films the active Space — so a fullscreen
+  // browser records as an empty file. A maximized window stays on the current
+  // Space and still covers every other window, so the capture is the browser
+  // with only the thin menu bar showing, which the live scene's zoom crops off
+  // the top anyway.
   const browser = await chromium.launch({
     headless: false,
-    args: ["--kiosk", "--start-fullscreen", "--window-position=0,0"],
+    args: ["--start-maximized", "--window-position=0,0"],
   });
-  const recorder = startScreenRecording(outPath);
+  const screenIndex = await resolveScreenIndex();
+  console.log(`live capture: recording avfoundation screen device [${screenIndex}]`);
+  const recorder = startScreenRecording(outPath, screenIndex);
 
   const shot = async (page: import("playwright").Page, label: string): Promise<void> => {
     try {
