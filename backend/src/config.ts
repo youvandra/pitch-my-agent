@@ -1,0 +1,41 @@
+import "dotenv/config";
+import path from "node:path";
+
+export const config = {
+  port: Number(process.env.PORT || "3007"),
+  nodeEnv: process.env.NODE_ENV || "development",
+  // Public origin for absolute URLs in deliveries. Empty → relative URLs.
+  publicBaseUrl: (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, ""),
+
+  // x402 seller side. XLAYER_* are merchant API credentials used by the OKX
+  // facilitator to settle incoming payments — unrelated to the buyer-side
+  // agentic-wallet session used by the demo caller.
+  x402Mode: (process.env.X402_MODE || "off") as "off" | "demo" | "on",
+  x402PayTo: process.env.X402_PAY_TO || "",
+  xlayerApiKey: process.env.XLAYER_API_KEY || "",
+  xlayerSecretKey: process.env.XLAYER_SECRET_KEY || "",
+  xlayerPassphrase: process.env.XLAYER_PASSPHRASE || "",
+
+  priceStandardUsd: process.env.PRICE_STANDARD_USD || "2.00",
+  pricePremiumUsd: process.env.PRICE_PREMIUM_USD || "4.00",
+
+  // AI layer. Without a key the deterministic fallback runs, so a video is
+  // still produced — just with generic copy and an extraction-only palette.
+  sumopodApiKey: process.env.SUMOPOD_API_KEY || "",
+  sumopodBaseUrl: process.env.SUMOPOD_BASE_URL || "https://ai.sumopod.com/v1",
+  sumopodModel: process.env.SUMOPOD_MODEL || "deepseek-v4-flash",
+  // Vision model for palette refinement. Empty → extraction-only palette.
+  sumopodVisionModel: process.env.SUMOPOD_VISION_MODEL || "",
+
+  // Absolute path: a spawned process does not inherit the interactive PATH.
+  onchainosBin: process.env.ONCHAINOS_BIN || "onchainos",
+
+  videoProjectDir: path.resolve(process.env.VIDEO_PROJECT_DIR || "../video"),
+  outputDir: process.env.OUTPUT_DIR || "/tmp/pitch-my-agent",
+  outputTtlMs: Number(process.env.OUTPUT_TTL_MS || "604800000"),
+  renderTimeoutMs: Number(process.env.RENDER_TIMEOUT_MS || "900000"),
+  renderConcurrency: Number(process.env.RENDER_CONCURRENCY || "1"),
+};
+
+export const hasAi = (): boolean => !!config.sumopodApiKey;
+export const hasVision = (): boolean => !!config.sumopodApiKey && !!config.sumopodVisionModel;

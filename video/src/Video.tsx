@@ -1,0 +1,52 @@
+import React from "react";
+import { AbsoluteFill, Sequence, interpolate, useCurrentFrame } from "remotion";
+import { sceneFrames, type SceneName, type VideoSpec } from "./schema";
+import { SceneCta, SceneHook, SceneLive, SceneProblem, SceneReveal, SceneServices } from "./scenes";
+
+const FADE = 9;
+
+// Soft dissolve between sequences instead of hard cuts.
+const Fade: React.FC<{ dur: number; children: React.ReactNode }> = ({ dur, children }) => {
+  const frame = useCurrentFrame();
+  const opacity = interpolate(frame, [0, FADE, dur - FADE, dur], [0, 1, 1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  return <AbsoluteFill style={{ opacity }}>{children}</AbsoluteFill>;
+};
+
+const ORDER: SceneName[] = ["hook", "problem", "reveal", "live", "services", "cta"];
+
+const COMPONENTS: Record<SceneName, React.FC<{ spec: VideoSpec }>> = {
+  hook: SceneHook,
+  problem: SceneProblem,
+  reveal: SceneReveal,
+  live: SceneLive,
+  services: SceneServices,
+  cta: SceneCta,
+};
+
+export const Video: React.FC<VideoSpec> = (spec) => {
+  const frames = sceneFrames(spec);
+  let from = 0;
+
+  return (
+    <AbsoluteFill style={{ background: spec.theme.bg }}>
+      {ORDER.map((name) => {
+        const dur = frames[name];
+        // A zero-length scene (e.g. no live segment) is skipped entirely.
+        if (dur <= 0) return null;
+        const Scene = COMPONENTS[name];
+        const node = (
+          <Sequence key={name} from={from} durationInFrames={dur}>
+            <Fade dur={dur}>
+              <Scene spec={spec} />
+            </Fade>
+          </Sequence>
+        );
+        from += dur;
+        return node;
+      })}
+    </AbsoluteFill>
+  );
+};

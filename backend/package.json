@@ -1,0 +1,30 @@
+{
+  "name": "pitch-my-agent-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pitch My Agent — auto demo-video generator as an A2MCP ASP on OKX.ai",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "tsx --test src/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@okxweb3/x402-core": "^0.1.0",
+    "@okxweb3/x402-evm": "^0.2.1",
+    "@okxweb3/x402-express": "^0.1.1",
+    "dotenv": "^17.4.2",
+    "express": "^5.1.0",
+    "sharp": "^0.35.3",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
