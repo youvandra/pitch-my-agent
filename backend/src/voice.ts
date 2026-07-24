@@ -76,6 +76,24 @@ const VOICE_PICKS: Record<VoiceGender, Array<{ id: string; name: string }>> = {
 /** Label use-cases that suit narration, in preference order. */
 const GOOD_USE_CASES = /informative|educational|narrative|narration|broadcast|advertisement/i;
 
+/**
+ * The pitch is always narrated in English — the audience is the OKX.ai
+ * marketplace. A voice trained on another accent reading English text drifts in
+ * pronunciation, so non-English voices are excluded from auto-resolution even
+ * when they match the requested gender. ELEVENLABS_VOICE_ID still overrides, for
+ * when a specific voice (a clone, say) is chosen deliberately.
+ */
+const ENGLISH_ACCENTS = /american|british|english|australian|irish|canadian|scottish|transatlantic/i;
+
+function isEnglishVoice(v: ElevenVoice): boolean {
+  const language = v.labels?.language ?? "";
+  if (language) return language.toLowerCase().startsWith("en");
+  const accent = v.labels?.accent ?? "";
+  // No language label: trust the accent, and reject anything explicitly foreign
+  // (e.g. an "id-standard" clone).
+  return accent === "" || ENGLISH_ACCENTS.test(accent);
+}
+
 const resolved = new Map<string, string>();
 
 /**
@@ -105,8 +123,9 @@ async function resolveVoiceId(gender: VoiceGender): Promise<string> {
   const { voices = [] } = (await res.json()) as { voices?: ElevenVoice[] };
   if (voices.length === 0) throw new Error("ElevenLabs returned no voices for this account.");
 
-  const available = new Set(voices.map((v) => v.voice_id));
-  const byGender = voices.filter((v) => (v.labels?.gender ?? "") === gender);
+  const english = voices.filter(isEnglishVoice);
+  const available = new Set(english.map((v) => v.voice_id));
+  const byGender = english.filter((v) => (v.labels?.gender ?? "") === gender);
 
   const pick =
     // 1. a curated choice the account actually has
@@ -117,7 +136,9 @@ async function resolveVoiceId(gender: VoiceGender): Promise<string> {
       .map((v) => ({ id: v.voice_id, name: v.name }))[0] ??
     // 3. same gender, anything
     byGender.map((v) => ({ id: v.voice_id, name: v.name }))[0] ??
-    // 4. give up on gender rather than on the video
+    // 4. any English voice — give up on gender rather than on the video
+    (english[0] ? { id: english[0].voice_id, name: english[0].name } : null) ??
+    // 5. nothing English at all: better a narrated video than a silent one
     { id: voices[0].voice_id, name: voices[0].name };
 
   resolved.set(gender, pick.id);

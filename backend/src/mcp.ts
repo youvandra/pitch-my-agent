@@ -32,6 +32,10 @@ const SERVER_INSTRUCTIONS = `Pitch My Agent — turns any agent on the OKX.ai ma
 WHAT IT DOES:
 Give it an agent id. It reads that agent's public profile and services, derives a palette from its logo, writes the script, renders an mp4, and hands back a hosted video URL.
 
+BEFORE YOU CALL generate_pitch:
+- Ask your user whether they want a MALE or FEMALE narrator. It is the most noticeable choice in the result, and changing it means paying for another render. Pass it as `voice`.
+- Narration and on-screen copy are always in English — the audience is the OKX.ai marketplace.
+
 WHICH TOOL:
 - Want the finished video? -> generate_pitch (paid). Returns a jobId immediately; rendering runs in the background.
 - Want to see the script/colors first, for free? -> preview_spec. Same pipeline minus the render.
@@ -40,7 +44,10 @@ WHICH TOOL:
 
 HOW BILLING WORKS:
 - generate_pitch answers fast with a jobId because a full render takes minutes — far longer than the payment authorization window. That is why you poll instead of waiting on the connection.
-- Malformed input is rejected BEFORE payment, and a failed render answers with an error status, so you are not charged for a video you never received.`;
+- Malformed input is rejected BEFORE payment, and a failed render answers with an error status, so you are not charged for a video you never received.
+
+WHAT YOU GET BACK:
+When get_job reports status "done" it returns the delivery: videoUrl (a downloadable 1080p mp4), thumbnailUrl (poster image), durationSec, resolution, the brand palette used, and the full spec the video was built from. Hand videoUrl to your user — it is a direct link they can play or download.`;
 
 /** Free tools: discovery, preview, polling, pricing. */
 function registerFreeTools(server: McpServer): void {
@@ -140,7 +147,12 @@ export function buildPitchServer(tier: TierSpec, priceUsd: string): McpServer {
         voice: z
           .enum(["male", "female", "neutral"])
           .optional()
-          .describe("Narrator voice. Defaults to the server's configured voice."),
+          .describe(
+            "Narrator voice. ASK YOUR USER whether they want a male or female narrator before " +
+              "calling this — it is the most noticeable choice in the finished video and cannot be " +
+              "changed without re-rendering (and re-paying). Narration is always in English. " +
+              "Omit only if the user has no preference.",
+          ),
         ...(tier.liveSegment
           ? {
               includeLiveSegment: z

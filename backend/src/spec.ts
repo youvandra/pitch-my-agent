@@ -80,7 +80,7 @@ async function generateCopy(agent: AgentProfile): Promise<AiCopy | null> {
     `Return ONLY minified JSON: {"tagline":"","hook":{"eyebrow":"","headline":"","sub":""},` +
     `"problem":{"eyebrow":"","headline":"","sub":""},"reveal":{"eyebrow":"","headline":"","sub":""},` +
     `"cta":{"eyebrow":"","headline":"","sub":""}}\n` +
-    `Rules: headline <= 42 chars, sub <= 120 chars, eyebrow <= 18 chars. ` +
+    `Rules: WRITE IN ENGLISH. Headline <= 42 chars, sub <= 120 chars, eyebrow <= 18 chars. ` +
     `Concrete and specific to what this agent actually does. No hype, no emoji, no invented features.`;
 
   const res = await fetch(`${config.sumopodBaseUrl}/chat/completions`, {
@@ -174,7 +174,8 @@ async function generateScript(spec: VideoSpec, agent: AgentProfile): Promise<Scr
     `- hook: "${spec.hook.headline}"\n- problem: "${spec.problem.headline}"\n` +
     `- reveal: "${spec.reveal.headline}"\n- cta: "${spec.cta.headline}"\n\n` +
     `Return ONLY minified JSON: {"hook":"","problem":"","reveal":"","live":"","services":"","cta":""}\n` +
-    `Rules: one sentence per scene, 8-22 words, spoken register (contractions are fine). ` +
+    `Rules: WRITE IN ENGLISH regardless of the agent's own language. One sentence per scene, ` +
+    `8-22 words, spoken register (contractions are fine). ` +
     `Write numbers and symbols as they should be SPOKEN ("dot AI", "two dollars"), never as digits or symbols. ` +
     `Be concrete about what this agent actually does. No hype, no emoji, no invented features.`;
 
