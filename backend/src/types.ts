@@ -70,6 +70,12 @@ export interface SceneCopy {
   sub?: string;
 }
 
+/** The two-message exchange staged in the problem scene. */
+export interface ProblemExchange {
+  user: string;
+  agent: string;
+}
+
 export interface ServiceCard {
   name: string;
   description: string;
@@ -90,6 +96,8 @@ export interface VideoSpec {
   theme: Palette;
   hook: SceneCopy;
   problem: SceneCopy;
+  /** Dialogue for the problem scene — written per agent, not boilerplate. */
+  problemExchange: ProblemExchange;
   reveal: SceneCopy;
   services: ServiceCard[];
   cta: SceneCopy;

@@ -75,7 +75,8 @@ export const Stage: React.FC<{
         alignItems: align === "center" ? "center" : "flex-start",
         justifyContent: "center",
         textAlign: align,
-        padding: "0 132px",
+        // Extra bottom padding keeps scene content clear of the caption strip.
+        padding: "0 132px 150px",
         overflow: "hidden",
       }}
     >
@@ -410,6 +411,91 @@ export const ServiceRow: React.FC<{
         ) : (
           price
         )}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Burned-in captions for the spoken line.
+ *
+ * Most people scrolling a feed watch muted, so a demo video with narration and
+ * no captions loses its argument entirely. ElevenLabs returns audio, not word
+ * timings, so the line is split into short phrases and timed by character
+ * count — speech rate is near enough constant within one sentence for this to
+ * track well, and a phrase is far more forgiving of drift than a word would be.
+ */
+export const Caption: React.FC<{ theme: Palette; text: string; durationSec: number }> = ({
+  theme,
+  text,
+  durationSec,
+}) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+
+  const phrases = React.useMemo(() => {
+    const words = text.trim().split(/\s+/);
+    const out: string[] = [];
+    let line: string[] = [];
+    for (const w of words) {
+      line.push(w);
+      // Break on punctuation, or once the phrase is long enough to read.
+      if (line.join(" ").length >= 32 || /[,.;:!?]$/.test(w)) {
+        out.push(line.join(" "));
+        line = [];
+      }
+    }
+    if (line.length) out.push(line.join(" "));
+    return out.length ? out : [text];
+  }, [text]);
+
+  const totalChars = phrases.reduce((n, p) => n + p.length, 0) || 1;
+  const t = frame / fps;
+
+  let start = 0;
+  let active = phrases[0];
+  for (const phrase of phrases) {
+    const span = (phrase.length / totalChars) * durationSec;
+    if (t >= start && t < start + span) {
+      active = phrase;
+      break;
+    }
+    start += span;
+    active = phrase;
+  }
+
+  const fade = interpolate(frame, [0, 6], [0, 1], { extrapolateRight: "clamp" });
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 74,
+        display: "flex",
+        justifyContent: "center",
+        pointerEvents: "none",
+        opacity: fade,
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 1320,
+          textAlign: "center",
+          fontSize: 34,
+          lineHeight: 1.3,
+          fontWeight: 600,
+          color: "#FFFFFF",
+          padding: "14px 28px",
+          borderRadius: 14,
+          background: "#00000099",
+          // Keeps the text legible over a light frame of the live recording too.
+          textShadow: "0 2px 12px rgba(0,0,0,.9)",
+          border: `1px solid ${theme.muted}22`,
+        }}
+      >
+        {active}
       </div>
     </div>
   );

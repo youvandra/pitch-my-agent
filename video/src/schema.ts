@@ -33,6 +33,11 @@ export const narrationLineSchema = z.object({
   durationSec: z.number(),
 });
 
+export const problemExchangeSchema = z.object({
+  user: z.string(),
+  agent: z.string(),
+});
+
 export const videoSpecSchema = z.object({
   agentId: z.string(),
   agentName: z.string(),
@@ -42,6 +47,7 @@ export const videoSpecSchema = z.object({
   theme: paletteSchema,
   hook: sceneCopySchema,
   problem: sceneCopySchema,
+  problemExchange: problemExchangeSchema,
   reveal: sceneCopySchema,
   services: z.array(serviceCardSchema),
   cta: sceneCopySchema,
@@ -163,6 +169,10 @@ export const DEFAULT_SPEC: VideoSpec = {
     eyebrow: "The problem",
     headline: "Your agent hits a wall.",
     sub: "Some work needs a specialist. Paying one should take a single call.",
+  },
+  problemExchange: {
+    user: "Can you handle this for me?",
+    agent: "I can't do that on my own.",
   },
   reveal: { eyebrow: "Meet", headline: "Example Agent", sub: "2 services, pay-per-call over x402." },
   services: [

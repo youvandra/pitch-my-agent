@@ -80,13 +80,13 @@ export const SceneProblem: React.FC<SceneProps> = ({ spec }) => {
       >
         <BlurIn delay={26} y={16}>
           <Bubble theme={spec.theme} from="user">
-            Can you handle this for me?
+            {spec.problemExchange.user}
           </Bubble>
         </BlurIn>
         <BlurIn delay={40} y={16}>
           <Bubble theme={spec.theme} from="agent">
             <span style={{ opacity: interpolate(frame, [40, 56], [0.4, 1], { extrapolateRight: "clamp" }) }}>
-              I can't do that on my own.
+              {spec.problemExchange.agent}
             </span>
           </Bubble>
         </BlurIn>
