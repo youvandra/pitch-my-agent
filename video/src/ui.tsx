@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Img, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { loadFont as loadDisplay } from "@remotion/google-fonts/Sora";
 import { loadFont as loadBody } from "@remotion/google-fonts/Inter";
 import { loadFont as loadMono } from "@remotion/google-fonts/JetBrainsMono";
@@ -144,7 +144,9 @@ export const Avatar: React.FC<{ theme: Palette; url: string; name: string; size?
     }}
   >
     {url ? (
-      <img src={url} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      // Remotion's <Img> holds the frame until the image has loaded; a plain
+      // <img> renders an empty box because the capture does not wait for it.
+      <Img src={url} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
     ) : (
       name.slice(0, 1).toUpperCase()
     )}

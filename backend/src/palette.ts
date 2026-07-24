@@ -127,6 +127,57 @@ async function refineWithVision(
   };
 }
 
+/** Convert #rrggbb to HSL, nudge lightness, convert back. */
+function withLightness(color: string, targetL: number): string {
+  const n = parseInt(color.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => v / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  let h = 0;
+  if (d !== 0) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+  }
+  h *= 60;
+  if (h < 0) h += 360;
+
+  const c = (1 - Math.abs(2 * targetL - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = targetL - c / 2;
+  const [r2, g2, b2] =
+    h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+    : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return (
+    "#" +
+    [r2, g2, b2]
+      .map((v) => Math.round((v + m) * 255).toString(16).padStart(2, "0"))
+      .join("")
+  );
+}
+
+/**
+ * Force a brand color to be legible against the background.
+ *
+ * A logo color is chosen for a logo, not for type on a dark stage: BoredComic's
+ * mark yields a near-black red that vanishes against the backdrop. Keep the hue
+ * — that is the brand — and raise lightness until it actually reads.
+ */
+function ensureReadable(color: string, bg: string, minRatio = 4.5): string {
+  if (contrastRatio(color, bg) >= minRatio) return color;
+  const bgIsDark = luminance(bg) < 0.5;
+  for (let i = 1; i <= 18; i++) {
+    // Walk away from the background: lighter on a dark stage, darker on a light one.
+    const target = bgIsDark ? 0.3 + i * 0.035 : 0.7 - i * 0.035;
+    const candidate = withLightness(color, Math.min(0.95, Math.max(0.05, target)));
+    if (contrastRatio(candidate, bg) >= minRatio) return candidate;
+  }
+  return bgIsDark ? "#F4F1E9" : "#0F172A";
+}
+
 /**
  * Build the palette for an agent. Never throws — every failure path degrades to
  * the style's default palette.
@@ -155,7 +206,9 @@ export async function buildPalette(
     if (extracted.length > 0) {
       if (hasVision()) {
         palette = (await refineWithVision(avatarUrl, extracted, style)) ?? {
-          ...fallback, primary: extracted[0], accent: extracted[1] ?? extracted[0],
+          ...fallback,
+          primary: ensureReadable(extracted[0], fallback.bg),
+          accent: ensureReadable(extracted[1] ?? extracted[0], fallback.bg),
           source: "extracted",
         };
       } else {
@@ -163,8 +216,8 @@ export async function buildPalette(
         // logo's own hues, so contrast stays predictable.
         palette = {
           ...fallback,
-          primary: extracted[0],
-          accent: extracted[1] ?? extracted[0],
+          primary: ensureReadable(extracted[0], fallback.bg),
+          accent: ensureReadable(extracted[1] ?? extracted[0], fallback.bg),
           source: "extracted",
         };
       }

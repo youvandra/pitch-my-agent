@@ -34,20 +34,25 @@ function publicUrl(jobId: string, file: string): string {
 
 /** Breathing room around a spoken line, so narration never butts into a cut. */
 const VO_PAD_SEC = 0.9;
+/** Must match FPS in video/src/schema.ts. */
+const FPS = 30;
 
 /**
- * Minimum total duration once narration exists.
+ * Total duration once narration exists.
  *
- * Each scene is rounded up to a whole bar (that is what keeps cuts on the beat),
- * so the total is the sum of those rounded-up lengths — not the sum of the raw
- * audio. Computing it any other way would leave the last line clipped.
+ * Each scene is its spoken line rounded up to a whole bar — that is what keeps
+ * cuts on the beat. The arithmetic runs in whole frames, exactly as
+ * `sceneFrames()` does in the template: computing it in float seconds instead
+ * drifts by a frame per bar, and the delivery would then disagree with the file
+ * it describes.
  */
 function totalWithNarration(bpm: number, narration: NarrationLine[]): number {
-  const barSec = (60 / bpm) * 4;
-  return narration.reduce(
-    (sum, line) => sum + Math.ceil((line.durationSec + VO_PAD_SEC) / barSec) * barSec,
-    0,
-  );
+  const barFrames = Math.round((60 / bpm) * 4 * FPS);
+  const frames = narration.reduce((sum, line) => {
+    const needed = Math.round((line.durationSec + VO_PAD_SEC) * FPS);
+    return sum + Math.max(barFrames, Math.ceil(needed / barFrames) * barFrames);
+  }, 0);
+  return frames / FPS;
 }
 
 /**
@@ -84,13 +89,17 @@ export async function runPipeline(jobId: string, input: GeneratePitchInput, tier
     if (input.voiceover !== false) {
       setStage(jobId, "recording_voice");
       const script = await buildScript(spec, agent);
-      const narration = await synthesizeNarration(jobId, script, input.voice);
+      // The live scene collapses to nothing when there is no recording, so
+      // narrating it would mean paying for audio that never plays.
+      const speakable = spec.liveSegmentUrl ? script : script.filter((l) => l.scene !== "live");
+      const narration = await synthesizeNarration(jobId, speakable, input.voice);
       if (narration.length > 0) {
         spec.narration = narration;
-        // Every spoken line has to fit its scene, and the renderer rounds each
-        // scene up to a bar boundary — so the total must account for that
-        // rounding, otherwise the composition would be cut short.
-        spec.durationSec = Math.max(spec.durationSec, totalWithNarration(spec.bpm, narration));
+        // Once narrated, the voice sets the length: each scene is its line
+        // rounded up to a whole bar, and the renderer derives the composition
+        // from exactly that. Reporting the tier's nominal duration instead would
+        // make the delivery disagree with the file.
+        spec.durationSec = totalWithNarration(spec.bpm, narration);
       }
     }
 
