@@ -84,7 +84,7 @@ export async function runPipeline(jobId: string, input: GeneratePitchInput, tier
     if (input.voiceover !== false) {
       setStage(jobId, "recording_voice");
       const script = await buildScript(spec, agent);
-      const narration = await synthesizeNarration(jobId, script);
+      const narration = await synthesizeNarration(jobId, script, input.voice);
       if (narration.length > 0) {
         spec.narration = narration;
         // Every spoken line has to fit its scene, and the renderer rounds each

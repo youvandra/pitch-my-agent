@@ -35,6 +35,11 @@ export const config = {
   // so pinning a legacy premade id is a scheduled outage.
   elevenVoiceId: process.env.ELEVENLABS_VOICE_ID || "",
   elevenModel: process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2",
+  // Default narrator voice when the caller does not pick one.
+  voiceGender: (process.env.ELEVENLABS_VOICE_GENDER || "male") as "male" | "female" | "neutral",
+  // PCM sample rate. 44100 needs a Pro plan; 22050 works on lower tiers and is
+  // ample for narration. Downgrades automatically if the plan rejects it.
+  elevenSampleRate: Number(process.env.ELEVENLABS_SAMPLE_RATE || "22050"),
 
   // Tempo of the generated backing track. Scene cuts are quantized to bars at
   // this tempo (see docs/VIDEO_CRAFT.md).

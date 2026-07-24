@@ -137,6 +137,10 @@ export function buildPitchServer(tier: TierSpec, priceUsd: string): McpServer {
       inputSchema: {
         agentId: AGENT_ID,
         style: STYLE,
+        voice: z
+          .enum(["male", "female", "neutral"])
+          .optional()
+          .describe("Narrator voice. Defaults to the server's configured voice."),
         ...(tier.liveSegment
           ? {
               includeLiveSegment: z

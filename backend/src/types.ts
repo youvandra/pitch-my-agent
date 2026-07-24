@@ -44,6 +44,9 @@ export type VisualStyle = "terminal" | "playful" | "saas";
 
 // ─── Narration ───────────────────────────────────────────────────────────────
 
+/** Narrator voice to use. Resolved to a concrete ElevenLabs voice at runtime. */
+export type VoiceGender = "male" | "female" | "neutral";
+
 /** Scenes that can carry a spoken line. Mirrors the Remotion scene order. */
 export type SceneKey = "hook" | "problem" | "reveal" | "live" | "services" | "cta";
 
@@ -127,6 +130,8 @@ export interface GeneratePitchInput {
   includeLiveSegment?: boolean;
   /** Narrate the video. Default true; ignored when no voice provider is set. */
   voiceover?: boolean;
+  /** Narrator voice. Default comes from ELEVENLABS_VOICE_GENDER. */
+  voice?: VoiceGender;
 }
 
 export interface Delivery {

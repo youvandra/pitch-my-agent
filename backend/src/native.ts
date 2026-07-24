@@ -10,7 +10,7 @@
 import type { Request, Response } from "express";
 import { runPipeline, etaSeconds, type TierSpec } from "./pipeline.js";
 import { createJob } from "./store.js";
-import type { GeneratePitchInput, VisualStyle } from "./types.js";
+import type { GeneratePitchInput, VisualStyle, VoiceGender } from "./types.js";
 
 export const PAID_TOOLS = new Set(["generate_pitch"]);
 
@@ -53,6 +53,7 @@ export async function handleNativePaidCall(req: Request, res: Response, tier: Ti
       agentId: String(args.agentId),
       style: args.style as VisualStyle | undefined,
       includeLiveSegment: args.includeLiveSegment as boolean | undefined,
+      voice: args.voice as VoiceGender | undefined,
     };
     const jobId = `pma_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
