@@ -11,6 +11,7 @@ import {
   Eyebrow,
   H1,
   MaskLine,
+  OkxMark,
   Pop,
   ServiceRow,
   Stage,
@@ -174,7 +175,10 @@ export const SceneCta: React.FC<SceneProps> = ({ spec }) => (
     </MaskLine>
     <Swipe theme={spec.theme} delay={26} width={420} />
     <BlurIn delay={32}>
-      <div style={{ fontSize: 34, color: spec.theme.muted, marginTop: 30 }}>on OKX.ai</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 20, marginTop: 34 }}>
+        <span style={{ fontSize: 32, color: spec.theme.muted }}>available on</span>
+        <OkxMark width={190} />
+      </div>
     </BlurIn>
   </Stage>
 );

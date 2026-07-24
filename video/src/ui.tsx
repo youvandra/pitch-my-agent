@@ -4,6 +4,7 @@ import { loadFont as loadDisplay } from "@remotion/google-fonts/Sora";
 import { loadFont as loadBody } from "@remotion/google-fonts/Inter";
 import { loadFont as loadMono } from "@remotion/google-fonts/JetBrainsMono";
 import type { Palette } from "./schema";
+import { OKX_LOGO_WHITE } from "./okx-logo";
 
 // Fonts are bundled and self-hosted by Remotion at build time, so a render never
 // depends on a system font and type is pixel-identical every time. Only the
@@ -413,6 +414,18 @@ export const ServiceRow: React.FC<{
     </div>
   );
 };
+
+/**
+ * The OKX wordmark. Always white — the stage is dark and the mark should read as
+ * the platform's, not be tinted into the agent's palette.
+ */
+export const OkxMark: React.FC<{ width?: number; opacity?: number }> = ({ width = 210, opacity = 1 }) => (
+  <Img
+    src={OKX_LOGO_WHITE}
+    alt="OKX"
+    style={{ width, height: "auto", display: "block", opacity }}
+  />
+);
 
 /** Browser chrome around the recorded live segment, so it reads as real usage. */
 export const BrowserFrame: React.FC<{ theme: Palette; children: React.ReactNode }> = ({ theme, children }) => (

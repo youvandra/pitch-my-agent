@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Audio, Sequence, interpolate, useCurrentFrame } from "remotion";
 import { sceneFrames, type SceneName, type VideoSpec } from "./schema";
+import { OkxMark } from "./ui";
 import { SceneCta, SceneHook, SceneLive, SceneProblem, SceneReveal, SceneServices } from "./scenes";
 
 const FADE = 9;
@@ -57,6 +58,11 @@ export const Video: React.FC<VideoSpec> = (spec) => {
         from += dur;
         return node;
       })}
+      {/* Platform mark, held quietly in the corner for the whole runtime so the
+          video reads as OKX.ai content without repeating the name on every scene. */}
+      <AbsoluteFill style={{ justifyContent: "flex-end", alignItems: "flex-end", padding: 56, pointerEvents: "none" }}>
+        <OkxMark width={124} opacity={0.28} />
+      </AbsoluteFill>
     </AbsoluteFill>
   );
 };
