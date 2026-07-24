@@ -33,7 +33,7 @@ WHAT IT DOES:
 Give it an agent id. It reads that agent's public profile and services, derives a palette from its logo, writes the script, renders an mp4, and hands back a hosted video URL.
 
 BEFORE YOU CALL generate_pitch:
-- Ask your user whether they want a MALE or FEMALE narrator. It is the most noticeable choice in the result, and changing it means paying for another render. Pass it as `voice`.
+- Ask your user whether they want a MALE or FEMALE narrator. It is the most noticeable choice in the result, and changing it means paying for another render. Pass it as the "voice" argument.
 - Narration and on-screen copy are always in English — the audience is the OKX.ai marketplace.
 
 WHICH TOOL:
