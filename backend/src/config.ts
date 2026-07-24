@@ -30,6 +30,9 @@ export const config = {
   // Voiceover (ElevenLabs). Without a key the layer no-ops and the video
   // renders silent — a missing voice must never fail a paid render.
   elevenApiKey: process.env.ELEVENLABS_API_KEY || "",
+  // Optional: leave empty to auto-resolve a voice from the account (see
+  // voice.ts). ElevenLabs retires its current default voices after 2026-12-31,
+  // so pinning a legacy premade id is a scheduled outage.
   elevenVoiceId: process.env.ELEVENLABS_VOICE_ID || "",
   elevenModel: process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2",
 
@@ -49,4 +52,4 @@ export const config = {
 
 export const hasAi = (): boolean => !!config.sumopodApiKey;
 export const hasVision = (): boolean => !!config.sumopodApiKey && !!config.sumopodVisionModel;
-export const hasVoice = (): boolean => !!config.elevenApiKey && !!config.elevenVoiceId;
+export const hasVoice = (): boolean => !!config.elevenApiKey;

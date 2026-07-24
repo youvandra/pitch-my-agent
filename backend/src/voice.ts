@@ -36,9 +36,61 @@ function pcmToWav(pcm: Buffer, sampleRate = SAMPLE_RATE): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
+// ─── Voice resolution ────────────────────────────────────────────────────────
+
+interface ElevenVoice {
+  voice_id: string;
+  name: string;
+  category?: string;
+  labels?: Record<string, string>;
+}
+
+let resolvedVoiceId: string | null = null;
+
+/**
+ * Pick a voice when none is configured.
+ *
+ * Premade voice IDs are shared across accounts, so one could simply be hardcoded
+ * — but ElevenLabs is retiring its current default voices (they stop working
+ * after 2026-12-31), so a pinned legacy ID is a scheduled outage. Asking the
+ * account which voices it actually has survives that swap.
+ */
+async function resolveVoiceId(): Promise<string> {
+  if (config.elevenVoiceId) return config.elevenVoiceId;
+  if (resolvedVoiceId) return resolvedVoiceId;
+
+  const res = await fetch("https://api.elevenlabs.io/v1/voices", {
+    headers: { "xi-api-key": config.elevenApiKey },
+  });
+  if (!res.ok) {
+    throw new Error(
+      `Could not list ElevenLabs voices (${res.status}). Set ELEVENLABS_VOICE_ID explicitly.`,
+    );
+  }
+
+  const { voices = [] } = (await res.json()) as { voices?: ElevenVoice[] };
+  if (voices.length === 0) throw new Error("ElevenLabs returned no voices for this account.");
+
+  const isEnglish = (v: ElevenVoice) =>
+    !v.labels?.language || v.labels.language.toLowerCase().startsWith("en");
+
+  // Prefer a narration-friendly English voice, then any premade one, then
+  // whatever the account has.
+  const preferred =
+    voices.find((v) => isEnglish(v) && /narrat|present|news/i.test(v.labels?.use_case ?? "")) ??
+    voices.find((v) => isEnglish(v) && v.category === "premade") ??
+    voices.find((v) => v.category === "premade") ??
+    voices[0];
+
+  resolvedVoiceId = preferred.voice_id;
+  console.log(`voiceover: using ElevenLabs voice "${preferred.name}" (${resolvedVoiceId})`);
+  return resolvedVoiceId;
+}
+
 async function elevenLabsPcm(text: string): Promise<Buffer> {
+  const voiceId = await resolveVoiceId();
   const url =
-    `https://api.elevenlabs.io/v1/text-to-speech/${config.elevenVoiceId}` +
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}` +
     `?output_format=pcm_${SAMPLE_RATE}`;
 
   const res = await fetch(url, {
