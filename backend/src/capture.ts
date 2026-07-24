@@ -102,11 +102,16 @@ export async function captureLiveProof(
     return null;
   }
 
-  const recorder = startScreenRecording(outPath);
+  // Kiosk / fullscreen: ffmpeg films the whole display, so the browser has to
+  // own the whole display — otherwise the recording captures the desktop behind
+  // it (other windows, the dock, the permission dialog). Kiosk also hides the
+  // tab bar and address bar, which read as "someone's dev machine" rather than
+  // "the product".
   const browser = await chromium.launch({
     headless: false,
-    args: ["--window-size=1440,900", "--window-position=0,0"],
+    args: ["--kiosk", "--start-fullscreen", "--window-position=0,0"],
   });
+  const recorder = startScreenRecording(outPath);
 
   const shot = async (page: import("playwright").Page, label: string): Promise<void> => {
     try {
@@ -117,7 +122,9 @@ export async function captureLiveProof(
   };
 
   try {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    // viewport: null → the page fills the real (fullscreen) window instead of
+    // being boxed into a fixed size the kiosk window would frame with blank space.
+    const context = await browser.newContext({ viewport: null });
     // The agent opens in a new tab, so the page we act on has to be able to
     // change mid-run — `page` is reassigned to whichever tab is on screen.
     let page = await context.newPage();
