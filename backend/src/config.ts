@@ -16,8 +16,8 @@ export const config = {
   xlayerSecretKey: process.env.XLAYER_SECRET_KEY || "",
   xlayerPassphrase: process.env.XLAYER_PASSPHRASE || "",
 
-  priceStandardUsd: process.env.PRICE_STANDARD_USD || "2.00",
-  pricePremiumUsd: process.env.PRICE_PREMIUM_USD || "4.00",
+  priceAnimatedUsd: process.env.PRICE_ANIMATED_USD || "2.00",
+  priceLiveProofUsd: process.env.PRICE_LIVE_PROOF_USD || "4.00",
 
   // AI layer. Without a key the deterministic fallback runs, so a video is
   // still produced — just with generic copy and an extraction-only palette.
@@ -29,6 +29,10 @@ export const config = {
 
   // Voiceover (ElevenLabs). Without a key the layer no-ops and the video
   // renders silent — a missing voice must never fail a paid render.
+  // Kill switch for test renders: narration is the only part of the pipeline
+  // that spends money per run, so it can be turned off while iterating on the
+  // visuals without touching the code that uses it.
+  voiceEnabled: process.env.VOICE_ENABLED !== "false",
   elevenApiKey: process.env.ELEVENLABS_API_KEY || "",
   // Optional: leave empty to auto-resolve a voice from the account (see
   // voice.ts). ElevenLabs retires its current default voices after 2026-12-31,
@@ -53,8 +57,20 @@ export const config = {
   outputTtlMs: Number(process.env.OUTPUT_TTL_MS || "604800000"),
   renderTimeoutMs: Number(process.env.RENDER_TIMEOUT_MS || "900000"),
   renderConcurrency: Number(process.env.RENDER_CONCURRENCY || "1"),
+  // Delete every other job's output before rendering. Only ever for local
+  // iteration — in production this would destroy deliveries buyers paid for.
+  prunePreviousRenders: process.env.PRUNE_PREVIOUS_RENDERS === "true",
+
+  // Live-proof capture (macOS only). Needs Screen Recording permission for the
+  // process that runs it, and Playwright installed.
+  liveCaptureEnabled: process.env.LIVE_CAPTURE_ENABLED === "true",
+  // avfoundation device index for the display; `ffmpeg -f avfoundation
+  // -list_devices true -i ""` prints it. 4 on this machine.
+  captureScreenIndex: process.env.CAPTURE_SCREEN_INDEX || "4",
+  ffmpegBin: process.env.FFMPEG_BIN || "ffmpeg",
+  claudeAppName: process.env.CLAUDE_APP_NAME || "Claude",
 };
 
 export const hasAi = (): boolean => !!config.sumopodApiKey;
 export const hasVision = (): boolean => !!config.sumopodApiKey && !!config.sumopodVisionModel;
-export const hasVoice = (): boolean => !!config.elevenApiKey;
+export const hasVoice = (): boolean => config.voiceEnabled && !!config.elevenApiKey;

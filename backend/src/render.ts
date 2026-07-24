@@ -119,9 +119,27 @@ function localizeProps(jobId: string, spec: VideoSpec, origin: string): VideoSpe
   };
 }
 
+/**
+ * Delete every other job's output. Local iteration only — renders are large and
+ * pile up fast while tuning — and gated behind a flag because in production this
+ * would destroy deliveries buyers already paid for.
+ */
+function prunePreviousRenders(keepJobId: string): void {
+  if (!config.prunePreviousRenders) return;
+  try {
+    for (const entry of fs.readdirSync(config.outputDir)) {
+      if (entry === keepJobId || entry === "jobs") continue;
+      fs.rmSync(path.join(config.outputDir, entry), { recursive: true, force: true });
+    }
+  } catch (err) {
+    console.error("could not prune previous renders:", err);
+  }
+}
+
 export async function renderVideo(jobId: string, spec: VideoSpec): Promise<RenderResult> {
   const outDir = path.join(config.outputDir, jobId);
   fs.mkdirSync(outDir, { recursive: true });
+  prunePreviousRenders(jobId);
 
   const propsPath = path.join(outDir, "props.json");
   const videoPath = path.join(outDir, "pitch.mp4");

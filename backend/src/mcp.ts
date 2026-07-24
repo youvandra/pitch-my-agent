@@ -68,7 +68,7 @@ function registerFreeTools(server: McpServer): void {
       const visualStyle: VisualStyle = style ?? "terminal";
       const agent = await fetchAgent(agentId);
       const theme = await buildPalette(agent.agentId, agent.avatarUrl, visualStyle);
-      const spec = await buildSpec(agent, visualStyle, theme, TIERS.standard.durationSec);
+      const spec = await buildSpec(agent, visualStyle, theme, TIERS.animated.durationSec);
       return json({ agent: { id: agent.agentId, name: agent.name, services: agent.services.length }, spec });
     },
   );
@@ -102,17 +102,17 @@ function registerFreeTools(server: McpServer): void {
       json({
         ...x402Info(),
         tiers: {
-          standard: {
-            endpoint: "/pitch/standard",
-            price: `$${config.priceStandardUsd}`,
-            durationSec: TIERS.standard.durationSec,
-            liveSegment: false,
+          animated: {
+            endpoint: "/pitch/animated",
+            price: `$${config.priceAnimatedUsd}`,
+            includes: "motion-graphics pitch with narration, captions and music",
           },
-          premium: {
-            endpoint: "/pitch/premium",
-            price: `$${config.pricePremiumUsd}`,
-            durationSec: TIERS.premium.durationSec,
-            liveSegment: true,
+          "live-proof": {
+            endpoint: "/pitch/live-proof",
+            price: `$${config.priceLiveProofUsd}`,
+            includes:
+              "everything in Animated Pitch, plus a real screen recording of this agent " +
+              "being opened and used on the OKX.ai marketplace, spliced into the middle",
           },
         },
       }),

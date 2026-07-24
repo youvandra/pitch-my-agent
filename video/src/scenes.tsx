@@ -118,27 +118,45 @@ export const SceneReveal: React.FC<SceneProps> = ({ spec }) => (
 );
 
 /**
- * 4 · LIVE — the recording, framed as a browser. Text stays out of the way here;
- * the footage is the point.
+ * 4 · LIVE — the recording, framed as a browser.
+ *
+ * The footage is the point, so the copy stays out of the way. A slow push in
+ * does the work a manual zoom would: screen recordings are wide and detail-poor
+ * at 1080p, and drifting closer keeps the eye moving and the UI legible without
+ * having to fight the page's own zoom during capture.
  */
-export const SceneLive: React.FC<SceneProps> = ({ spec }) => (
-  <Stage theme={spec.theme} align="center">
-    <Eyebrow theme={spec.theme} delay={2}>
-      Live · paid over x402
-    </Eyebrow>
-    <BlurIn delay={8} y={26}>
-      <div style={{ width: 1560 }}>
-        <BrowserFrame theme={spec.theme}>
-          {spec.liveSegmentUrl ? (
-            <OffthreadVideo src={spec.liveSegmentUrl} style={{ width: "100%", display: "block" }} />
-          ) : (
-            <div style={{ height: 620 }} />
-          )}
-        </BrowserFrame>
-      </div>
-    </BlurIn>
-  </Stage>
-);
+export const SceneLive: React.FC<SceneProps> = ({ spec }) => {
+  const frame = useCurrentFrame();
+  const scale = interpolate(frame, [0, 240], [1, 1.14], { extrapolateRight: "clamp" });
+  const originY = interpolate(frame, [0, 240], [38, 46], { extrapolateRight: "clamp" });
+
+  return (
+    <Stage theme={spec.theme} align="center">
+      <Eyebrow theme={spec.theme} delay={2}>
+        Live on OKX.ai
+      </Eyebrow>
+      <BlurIn delay={8} y={26}>
+        <div style={{ width: 1560, overflow: "hidden", borderRadius: 18 }}>
+          <BrowserFrame theme={spec.theme}>
+            {spec.liveSegmentUrl ? (
+              <OffthreadVideo
+                src={spec.liveSegmentUrl}
+                style={{
+                  width: "100%",
+                  display: "block",
+                  transform: `scale(${scale})`,
+                  transformOrigin: `50% ${originY}%`,
+                }}
+              />
+            ) : (
+              <div style={{ height: 620 }} />
+            )}
+          </BrowserFrame>
+        </div>
+      </BlurIn>
+    </Stage>
+  );
+};
 
 /** 5 · SERVICES — the price list, built one row at a time, left aligned. */
 export const SceneServices: React.FC<SceneProps> = ({ spec }) => (

@@ -7,6 +7,7 @@ import { buildPalette } from "./palette.js";
 import { buildSpec, buildScript } from "./spec.js";
 import { synthesizeNarration } from "./voice.js";
 import { writeMusic } from "./music.js";
+import { captureLiveProof } from "./capture.js";
 import { renderVideo } from "./render.js";
 import { setStage, completeJob, failJob, getJob } from "./store.js";
 import type { Delivery, GeneratePitchInput, NarrationLine, VisualStyle } from "./types.js";
@@ -19,8 +20,8 @@ export interface TierSpec {
 }
 
 export const TIERS: Record<string, TierSpec> = {
-  standard: { id: "standard", durationSec: 60, liveSegment: false },
-  premium: { id: "premium", durationSec: 100, liveSegment: true },
+  animated: { id: "animated", durationSec: 60, liveSegment: false },
+  "live-proof": { id: "live-proof", durationSec: 100, liveSegment: true },
 };
 
 /** Rough ETA so a caller knows how long to poll for. */
@@ -59,15 +60,32 @@ function totalWithNarration(bpm: number, narration: NarrationLine[]): number {
 }
 
 /**
- * Record the live segment: a real session paying + calling the target agent.
+ * Film the marketplace being used with this agent.
  *
- * Not implemented yet — it needs the okx-pay MCP wrapper plus the macOS
- * automation (osascript + ffmpeg). Until then a premium job renders without it
- * rather than failing, and the delivery simply carries no liveSegmentUrl.
- * See PLAN §4.
+ * Returns undefined rather than throwing when capture is off or the recording
+ * fails: a live-proof job then delivers the animated cut instead of nothing.
+ * The caller is told, so the tier can be honest about what it produced.
  */
-async function recordLiveSegment(_jobId: string, _agentId: string): Promise<string | undefined> {
-  return undefined;
+async function recordLiveSegment(
+  jobId: string,
+  agentId: string,
+  agentName: string,
+): Promise<string | undefined> {
+  try {
+    const result = await captureLiveProof(jobId, agentId, agentName);
+    if (!result) return undefined;
+    const failed = result.steps.filter((s) => !s.ok);
+    if (failed.length > 0) {
+      console.warn(
+        `live capture completed with ${failed.length} failed step(s): ` +
+          failed.map((s) => s.step).join(", "),
+      );
+    }
+    return publicUrl(jobId, result.file);
+  } catch (err) {
+    console.error(`live capture failed for job ${jobId}:`, err);
+    return undefined;
+  }
 }
 
 export async function runPipeline(jobId: string, input: GeneratePitchInput, tier: TierSpec): Promise<void> {
@@ -85,7 +103,7 @@ export async function runPipeline(jobId: string, input: GeneratePitchInput, tier
 
     if (tier.liveSegment && input.includeLiveSegment !== false) {
       setStage(jobId, "recording_live");
-      const liveSegmentUrl = await recordLiveSegment(jobId, agent.agentId);
+      const liveSegmentUrl = await recordLiveSegment(jobId, agent.agentId, agent.name);
       if (liveSegmentUrl) spec.liveSegmentUrl = liveSegmentUrl;
     }
 

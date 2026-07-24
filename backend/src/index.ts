@@ -30,16 +30,16 @@ interface TierRoute {
 
 const TIER_ROUTES: TierRoute[] = [
   {
-    path: "/pitch/standard",
-    tier: TIERS.standard,
-    price: config.priceStandardUsd,
-    desc: "Pitch My Agent Standard — 60s demo video for an OKX.ai agent",
+    path: "/pitch/animated",
+    tier: TIERS.animated,
+    price: config.priceAnimatedUsd,
+    desc: "Animated Pitch — motion-graphics demo video for an OKX.ai agent",
   },
   {
-    path: "/pitch/premium",
-    tier: TIERS.premium,
-    price: config.pricePremiumUsd,
-    desc: "Pitch My Agent Premium — 100s demo video with a recorded live-call segment",
+    path: "/pitch/live-proof",
+    tier: TIERS["live-proof"],
+    price: config.priceLiveProofUsd,
+    desc: "Animated + Live-Proof Pitch — the same video with a real screen recording of the agent being used",
   },
 ];
 
