@@ -46,6 +46,25 @@ on off-beats. This is the change that makes it feel authored.
 
 **Do this before adding any effects library.** It is free and it matters more.
 
+**Status: implemented.** `video/src/beat.ts` exposes the grid, and
+`sceneFrames()` snaps every scene up to a whole bar — so cuts land on the beat in
+both narrated and silent mode. At 112 BPM a bar is 64 frames (2.13s).
+
+### Reconciling voiceover with the grid
+
+Narration and beat-locking pull against each other: a spoken line is however long
+it is, but cuts should land on bars. The resolution is to let the **voice drive
+the pacing and the grid keep the cuts musical** — each scene is as long as its
+line needs, rounded *up* to the next bar:
+
+```
+sceneFrames = ceil((voDuration + pad) / barFrames) * barFrames
+```
+
+The composition length is then the sum of those rounded scenes
+(`totalFrames()`), never the originally requested duration — computing it any
+other way clips the final line.
+
 ## Rules for our scenes
 
 - **Easing vocabulary: pick three, reuse them.** Springs (`spring()`) for

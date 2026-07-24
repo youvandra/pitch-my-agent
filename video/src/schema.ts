@@ -26,6 +26,13 @@ export const serviceCardSchema = z.object({
   price: z.string(),
 });
 
+export const narrationLineSchema = z.object({
+  scene: z.enum(["hook", "problem", "reveal", "live", "services", "cta"]),
+  text: z.string(),
+  audioUrl: z.string(),
+  durationSec: z.number(),
+});
+
 export const videoSpecSchema = z.object({
   agentId: z.string(),
   agentName: z.string(),
@@ -39,12 +46,15 @@ export const videoSpecSchema = z.object({
   services: z.array(serviceCardSchema),
   cta: sceneCopySchema,
   liveSegmentUrl: z.string().optional(),
+  narration: z.array(narrationLineSchema).optional(),
+  bpm: z.number(),
   durationSec: z.number(),
 });
 
 export type Palette = z.infer<typeof paletteSchema>;
 export type SceneCopy = z.infer<typeof sceneCopySchema>;
 export type ServiceCard = z.infer<typeof serviceCardSchema>;
+export type NarrationLine = z.infer<typeof narrationLineSchema>;
 export type VideoSpec = z.infer<typeof videoSpecSchema>;
 
 export const FPS = 30;
@@ -61,13 +71,47 @@ export const SCENE_WEIGHTS = {
 
 export type SceneName = keyof typeof SCENE_WEIGHTS;
 
+/** Breathing room after a spoken line, mirroring the backend's VO_PAD_SEC. */
+const VO_PAD_SEC = 0.9;
+
 /**
- * Split the total duration across scenes. Without a live segment its share is
- * redistributed proportionally, so the video never leaves a dead gap.
+ * Scene lengths in frames.
+ *
+ * Two modes, both landing every cut on a bar boundary so the edit sits on the
+ * beat rather than at an arbitrary frame:
+ *
+ * - **Narrated** — each scene is as long as its spoken line needs, rounded up to
+ *   a whole bar. The voice drives the pacing; the grid keeps the cuts musical.
+ * - **Silent** — the total is split by weight, then each scene is snapped to the
+ *   grid the same way.
+ *
+ * A scene with no live segment collapses to zero and its share is redistributed,
+ * so the video never sits on a dead gap.
  */
 export function sceneFrames(spec: VideoSpec): Record<SceneName, number> {
-  const total = Math.round(spec.durationSec * FPS);
+  const barFrames = Math.round((60 / spec.bpm) * 4 * FPS);
+  const snapUp = (frames: number): number =>
+    Math.max(barFrames, Math.ceil(frames / barFrames) * barFrames);
+
   const hasLive = !!spec.liveSegmentUrl;
+  const out = {} as Record<SceneName, number>;
+
+  const narration = spec.narration ?? [];
+  if (narration.length > 0) {
+    const spoken = new Map(narration.map((n) => [n.scene, n.durationSec]));
+    for (const key of Object.keys(SCENE_WEIGHTS) as SceneName[]) {
+      if (key === "live" && !hasLive) {
+        out[key] = 0;
+        continue;
+      }
+      const sec = spoken.get(key);
+      // A scene nobody narrates still needs to breathe: give it one bar.
+      out[key] = sec ? snapUp(Math.round((sec + VO_PAD_SEC) * FPS)) : barFrames;
+    }
+    return out;
+  }
+
+  const total = Math.round(spec.durationSec * FPS);
   const weights: Record<SceneName, number> = { ...SCENE_WEIGHTS };
   if (!hasLive) {
     const spare = weights.live;
@@ -76,11 +120,16 @@ export function sceneFrames(spec: VideoSpec): Record<SceneName, number> {
       weights[key] = key === "live" ? 0 : weights[key] + (weights[key] / rest) * spare;
     }
   }
-  const out = {} as Record<SceneName, number>;
   for (const key of Object.keys(weights) as SceneName[]) {
-    out[key] = Math.round(total * weights[key]);
+    out[key] = weights[key] === 0 ? 0 : snapUp(Math.round(total * weights[key]));
   }
   return out;
+}
+
+/** Total composition length, derived from the scene grid so nothing is clipped. */
+export function totalFrames(spec: VideoSpec): number {
+  const frames = sceneFrames(spec);
+  return Object.values(frames).reduce((a, b) => a + b, 0);
 }
 
 export const DEFAULT_SPEC: VideoSpec = {
@@ -110,5 +159,6 @@ export const DEFAULT_SPEC: VideoSpec = {
     { name: "Service Two", description: "What the second service returns.", price: "$3.00" },
   ],
   cta: { eyebrow: "Try it", headline: "Agent #6006", sub: "Find it on OKX.ai and call it from your own agent." },
+  bpm: 112,
   durationSec: 60,
 };

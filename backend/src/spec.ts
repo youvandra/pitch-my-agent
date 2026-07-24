@@ -4,7 +4,15 @@
 // template is fixed and consumes this as props, so a bad model response can
 // degrade the copy but can never break the render.
 import { config, hasAi } from "./config.js";
-import type { AgentProfile, Palette, SceneCopy, ServiceCard, VideoSpec, VisualStyle } from "./types.js";
+import type {
+  AgentProfile,
+  Palette,
+  SceneCopy,
+  SceneKey,
+  ServiceCard,
+  VideoSpec,
+  VisualStyle,
+} from "./types.js";
 
 const MAX_CARDS = 4;
 
@@ -48,6 +56,7 @@ function fallbackSpec(
       headline: `Agent #${agent.agentId}`,
       sub: "Find it on OKX.ai and call it from your own agent.",
     },
+    bpm: config.bpm,
     durationSec,
   };
 }
@@ -122,6 +131,91 @@ export async function buildSpec(
     };
   } catch (err) {
     console.error(`spec copy generation failed for agent ${agent.agentId}:`, err);
+    return base;
+  }
+}
+
+// ─── Narration script ────────────────────────────────────────────────────────
+
+export interface ScriptLine {
+  scene: SceneKey;
+  text: string;
+}
+
+/**
+ * Spoken lines derived from the on-screen copy.
+ *
+ * Narration must not simply read the headline aloud — hearing the same words you
+ * are reading is the flattest possible voiceover. These lines carry the
+ * connective tissue the text leaves out.
+ */
+function fallbackScript(spec: VideoSpec, agent: AgentProfile): ScriptLine[] {
+  const count = agent.services.length;
+  return [
+    { scene: "hook", text: `This is ${spec.agentName}, on the OKX dot AI marketplace.` },
+    { scene: "problem", text: spec.problem.sub ?? "Some work needs a specialist." },
+    {
+      scene: "reveal",
+      text: `It exposes ${count} service${count === 1 ? "" : "s"} your agent can call directly, and pay for per call.`,
+    },
+    { scene: "live", text: "Here it is, being paid and called for real." },
+    { scene: "services", text: "Every service is priced up front, so your agent can budget before it spends." },
+    { scene: "cta", text: `Find agent number ${spec.agentId} on OKX dot AI.` },
+  ];
+}
+
+async function generateScript(spec: VideoSpec, agent: AgentProfile): Promise<ScriptLine[] | null> {
+  const services = agent.services.map((s) => `- ${s.name} ($${s.fee}): ${s.description}`).join("\n");
+
+  const prompt =
+    `Write the voiceover narration for a short promo video about an AI agent on the OKX.ai marketplace.\n\n` +
+    `Agent: ${agent.name}\nDescription: ${agent.description}\nServices:\n${services}\n\n` +
+    `The following text is ALREADY on screen — do not repeat it, narrate around it:\n` +
+    `- hook: "${spec.hook.headline}"\n- problem: "${spec.problem.headline}"\n` +
+    `- reveal: "${spec.reveal.headline}"\n- cta: "${spec.cta.headline}"\n\n` +
+    `Return ONLY minified JSON: {"hook":"","problem":"","reveal":"","live":"","services":"","cta":""}\n` +
+    `Rules: one sentence per scene, 8-22 words, spoken register (contractions are fine). ` +
+    `Write numbers and symbols as they should be SPOKEN ("dot AI", "two dollars"), never as digits or symbols. ` +
+    `Be concrete about what this agent actually does. No hype, no emoji, no invented features.`;
+
+  const res = await fetch(`${config.sumopodBaseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.sumopodApiKey}`,
+    },
+    body: JSON.stringify({
+      model: config.sumopodModel,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.6,
+    }),
+  });
+  if (!res.ok) return null;
+
+  const body = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+  const match = (body.choices?.[0]?.message?.content ?? "").match(/\{[\s\S]*\}/);
+  if (!match) return null;
+
+  const parsed = JSON.parse(match[0]) as Partial<Record<SceneKey, string>>;
+  const order: SceneKey[] = ["hook", "problem", "reveal", "live", "services", "cta"];
+  const lines = order
+    .map((scene) => ({ scene, text: (parsed[scene] ?? "").trim() }))
+    .filter((l) => l.text.length > 0);
+
+  return lines.length > 0 ? lines : null;
+}
+
+/**
+ * Build the narration script. Never throws — falls back to deterministic lines so
+ * a flaky model cannot cost the buyer their voiceover.
+ */
+export async function buildScript(spec: VideoSpec, agent: AgentProfile): Promise<ScriptLine[]> {
+  const base = fallbackScript(spec, agent);
+  if (!hasAi()) return base;
+  try {
+    return (await generateScript(spec, agent)) ?? base;
+  } catch (err) {
+    console.error(`narration script generation failed for agent ${agent.agentId}:`, err);
     return base;
   }
 }

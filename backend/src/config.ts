@@ -27,6 +27,16 @@ export const config = {
   // Vision model for palette refinement. Empty → extraction-only palette.
   sumopodVisionModel: process.env.SUMOPOD_VISION_MODEL || "",
 
+  // Voiceover (ElevenLabs). Without a key the layer no-ops and the video
+  // renders silent — a missing voice must never fail a paid render.
+  elevenApiKey: process.env.ELEVENLABS_API_KEY || "",
+  elevenVoiceId: process.env.ELEVENLABS_VOICE_ID || "",
+  elevenModel: process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2",
+
+  // Tempo of the generated backing track. Scene cuts are quantized to bars at
+  // this tempo (see docs/VIDEO_CRAFT.md).
+  bpm: Number(process.env.BPM || "112"),
+
   // Absolute path: a spawned process does not inherit the interactive PATH.
   onchainosBin: process.env.ONCHAINOS_BIN || "onchainos",
 
@@ -39,3 +49,4 @@ export const config = {
 
 export const hasAi = (): boolean => !!config.sumopodApiKey;
 export const hasVision = (): boolean => !!config.sumopodApiKey && !!config.sumopodVisionModel;
+export const hasVoice = (): boolean => !!config.elevenApiKey && !!config.elevenVoiceId;

@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Sequence, interpolate, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Audio, Sequence, interpolate, useCurrentFrame } from "remotion";
 import { sceneFrames, type SceneName, type VideoSpec } from "./schema";
 import { SceneCta, SceneHook, SceneLive, SceneProblem, SceneReveal, SceneServices } from "./scenes";
 
@@ -28,6 +28,9 @@ const COMPONENTS: Record<SceneName, React.FC<{ spec: VideoSpec }>> = {
 
 export const Video: React.FC<VideoSpec> = (spec) => {
   const frames = sceneFrames(spec);
+  // Narration is keyed by scene so a line always plays over the scene it
+  // describes, however long the grid made that scene.
+  const voice = new Map((spec.narration ?? []).map((n) => [n.scene, n]));
   let from = 0;
 
   return (
@@ -37,8 +40,12 @@ export const Video: React.FC<VideoSpec> = (spec) => {
         // A zero-length scene (e.g. no live segment) is skipped entirely.
         if (dur <= 0) return null;
         const Scene = COMPONENTS[name];
+        const line = voice.get(name);
         const node = (
           <Sequence key={name} from={from} durationInFrames={dur}>
+            {/* The voice sits outside <Fade> — dipping narration volume with the
+                visual dissolve would clip the first and last words. */}
+            {line ? <Audio src={line.audioUrl} /> : null}
             <Fade dur={dur}>
               <Scene spec={spec} />
             </Fade>

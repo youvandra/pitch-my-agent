@@ -42,6 +42,22 @@ export interface Palette {
 
 export type VisualStyle = "terminal" | "playful" | "saas";
 
+// ─── Narration ───────────────────────────────────────────────────────────────
+
+/** Scenes that can carry a spoken line. Mirrors the Remotion scene order. */
+export type SceneKey = "hook" | "problem" | "reveal" | "live" | "services" | "cta";
+
+/**
+ * One synthesized voiceover line. `durationSec` is measured from the returned
+ * PCM, not estimated — scene timing is derived from it, so it has to be exact.
+ */
+export interface NarrationLine {
+  scene: SceneKey;
+  text: string;
+  audioUrl: string;
+  durationSec: number;
+}
+
 // ─── VideoSpec: the only thing the AI writes ─────────────────────────────────
 
 export interface SceneCopy {
@@ -76,7 +92,17 @@ export interface VideoSpec {
   cta: SceneCopy;
   /** Absolute/relative URL of the recorded live segment, when present. */
   liveSegmentUrl?: string;
-  /** Total target duration in seconds. */
+  /**
+   * Spoken lines, one per scene. Empty when no voice provider is configured —
+   * the video then renders silent rather than failing.
+   */
+  narration?: NarrationLine[];
+  /**
+   * Tempo of the backing track. Scene cuts are quantized to bars at this tempo,
+   * so the timing is authored rather than arbitrary (see docs/VIDEO_CRAFT.md).
+   */
+  bpm: number;
+  /** Total target duration in seconds. Grows to fit the narration. */
   durationSec: number;
 }
 
@@ -88,6 +114,7 @@ export type JobStage =
   | "building_spec"
   | "extracting_palette"
   | "recording_live"
+  | "recording_voice"
   | "rendering"
   | "packaging"
   | "done"
@@ -98,6 +125,8 @@ export interface GeneratePitchInput {
   style?: VisualStyle;
   /** Include the recorded live segment (premium tier). */
   includeLiveSegment?: boolean;
+  /** Narrate the video. Default true; ignored when no voice provider is set. */
+  voiceover?: boolean;
 }
 
 export interface Delivery {

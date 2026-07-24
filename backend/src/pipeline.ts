@@ -4,10 +4,11 @@ import path from "node:path";
 import { config } from "./config.js";
 import { fetchAgent } from "./okx.js";
 import { buildPalette } from "./palette.js";
-import { buildSpec } from "./spec.js";
+import { buildSpec, buildScript } from "./spec.js";
+import { synthesizeNarration } from "./voice.js";
 import { renderVideo } from "./render.js";
 import { setStage, completeJob, failJob, getJob } from "./store.js";
-import type { Delivery, GeneratePitchInput, VisualStyle } from "./types.js";
+import type { Delivery, GeneratePitchInput, NarrationLine, VisualStyle } from "./types.js";
 
 export interface TierSpec {
   id: string;
@@ -29,6 +30,24 @@ export function etaSeconds(tier: TierSpec): number {
 function publicUrl(jobId: string, file: string): string {
   const rel = `/videos/${jobId}/${file}`;
   return config.publicBaseUrl ? `${config.publicBaseUrl}${rel}` : rel;
+}
+
+/** Breathing room around a spoken line, so narration never butts into a cut. */
+const VO_PAD_SEC = 0.9;
+
+/**
+ * Minimum total duration once narration exists.
+ *
+ * Each scene is rounded up to a whole bar (that is what keeps cuts on the beat),
+ * so the total is the sum of those rounded-up lengths — not the sum of the raw
+ * audio. Computing it any other way would leave the last line clipped.
+ */
+function totalWithNarration(bpm: number, narration: NarrationLine[]): number {
+  const barSec = (60 / bpm) * 4;
+  return narration.reduce(
+    (sum, line) => sum + Math.ceil((line.durationSec + VO_PAD_SEC) / barSec) * barSec,
+    0,
+  );
 }
 
 /**
@@ -60,6 +79,19 @@ export async function runPipeline(jobId: string, input: GeneratePitchInput, tier
       setStage(jobId, "recording_live");
       const liveSegmentUrl = await recordLiveSegment(jobId, agent.agentId);
       if (liveSegmentUrl) spec.liveSegmentUrl = liveSegmentUrl;
+    }
+
+    if (input.voiceover !== false) {
+      setStage(jobId, "recording_voice");
+      const script = await buildScript(spec, agent);
+      const narration = await synthesizeNarration(jobId, script);
+      if (narration.length > 0) {
+        spec.narration = narration;
+        // Every spoken line has to fit its scene, and the renderer rounds each
+        // scene up to a bar boundary — so the total must account for that
+        // rounding, otherwise the composition would be cut short.
+        spec.durationSec = Math.max(spec.durationSec, totalWithNarration(spec.bpm, narration));
+      }
     }
 
     setStage(jobId, "rendering");
