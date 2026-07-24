@@ -66,7 +66,7 @@ export const config = {
   liveCaptureEnabled: process.env.LIVE_CAPTURE_ENABLED === "true",
   // avfoundation device index for the display; `ffmpeg -f avfoundation
   // -list_devices true -i ""` prints it. 4 on this machine.
-  captureScreenIndex: process.env.CAPTURE_SCREEN_INDEX || "4",
+  captureScreenIndex: process.env.CAPTURE_SCREEN_INDEX || "2",
   ffmpegBin: process.env.FFMPEG_BIN || "ffmpeg",
   claudeAppName: process.env.CLAUDE_APP_NAME || "Claude",
 };

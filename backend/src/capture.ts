@@ -57,10 +57,14 @@ function startScreenRecording(outPath: string): { stop: () => Promise<void> } {
           }
           resolve();
         });
-        // 'q' asks ffmpeg to finalise the container; SIGKILL would leave it corrupt.
+        // 'q' asks ffmpeg to finalise the container; killing outright would leave
+        // it corrupt. But an ffmpeg blocked on the Screen Recording permission
+        // dialog never reads stdin and can ignore SIGTERM, so escalate to
+        // SIGKILL — a hung recorder must not wedge the whole render.
         proc.stdin?.write("q");
         proc.stdin?.end();
         setTimeout(() => proc.kill("SIGTERM"), 4000);
+        setTimeout(() => proc.kill("SIGKILL"), 8000);
       }),
   };
 }
@@ -114,7 +118,9 @@ export async function captureLiveProof(
 
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-    const page = await context.newPage();
+    // The agent opens in a new tab, so the page we act on has to be able to
+    // change mid-run — `page` is reassigned to whichever tab is on screen.
+    let page = await context.newPage();
 
     const attempt = async (label: string, fn: () => Promise<void>, settle = 1500): Promise<boolean> => {
       try {
@@ -149,8 +155,23 @@ export async function captureLiveProof(
     }, 2200);
 
     await attempt("open the agent", async () => {
-      await page.getByText(agentName, { exact: false }).first().click({ timeout: 15000 });
-    }, 2800);
+      // Clicking the result row opens the agent in a NEW TAB, so wait for that
+      // tab and switch to it. The search result is a row, not a bare text node —
+      // target the row and click it, then fall back to the text if the layout
+      // differs from what was seen.
+      const row = page.getByRole("row", { name: new RegExp(agentName, "i") }).first();
+      const target = (await row.count()) > 0 ? row : page.getByText(agentName, { exact: false }).first();
+
+      const [opened] = await Promise.all([
+        context.waitForEvent("page", { timeout: 15000 }).catch(() => null),
+        target.click({ timeout: 15000 }),
+      ]);
+      if (opened) {
+        await opened.waitForLoadState("domcontentloaded", { timeout: 20000 }).catch(() => {});
+        await opened.bringToFront();
+        page = opened;
+      }
+    }, 3000);
 
     await attempt("press Use now", async () => {
       await page.getByRole("button", { name: /use now/i }).first().click({ timeout: 15000 });
