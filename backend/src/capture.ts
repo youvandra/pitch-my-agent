@@ -1,17 +1,22 @@
-// Live-proof capture: a real recording of the marketplace being used, then the
-// prompt being pasted into Claude Desktop.
+// Live-proof capture: a real recording of an agent being found, paid, and
+// delivering.
 //
 // This is the whole argument of the live-proof tier. An animated video can claim
-// anything; footage of the actual marketplace, the actual agent, and the prompt
-// landing in a real Claude window is the part a buyer cannot fake.
+// anything; the actual marketplace, a real request leaving a real Claude window,
+// and the artifact that came back are the parts a buyer cannot fake.
 //
-// It is filmed in two pieces because no single recorder covers both:
+// Three beats, two recorders, because no single one covers all of it:
 //   1. Browser — Playwright's recordVideo films the page content directly, so
 //      nothing but the viewport is ever in frame (no desktop leak, no
 //      permission, no avfoundation device index).
 //   2. Claude Desktop — a native app, so this piece is an ffmpeg screen grab
-//      cropped to the Claude window.
-// The two clips are concatenated into one live segment.
+//      cropped to its composer. It ends at the send: Claude runs the request as
+//      a background session and stays on a home screen carrying the operator's
+//      usage statistics, so there is nothing after the send worth filming and
+//      quite a lot worth not filming.
+//   3. The delivery — the link the agent answered with, opened in Playwright
+//      again. Read from okx-pay's receipt rather than off the screen.
+// The clips are normalised and concatenated into one live segment.
 //
 // macOS permission note: driving another app through AppleScript / System Events
 // needs the Automation entitlement, which a background process spawned under
@@ -191,14 +196,18 @@ function deliveryUrl(receipt: CallReceipt): string | null {
 // ─── Window geometry (Quartz, read-only, no permission) ──────────────────────
 
 /**
- * Logical width of the Claude sidebar, and the share of the window height taken
- * by the greeting and recent-sessions block above the composer. Both are
- * cropped away before the clip is used (see the crop below). The sidebar is a
- * fixed point width rather than a fraction so resizing the window does not
- * start revealing it.
+ * Logical width of the Claude sidebar, and the share of the window height above
+ * the composer. Both are cropped away before the clip is used (see the crop
+ * below), leaving the composer strip and nothing else.
+ *
+ * The sidebar lists the operator's own conversations; the area above the
+ * composer carries their name, recent sessions, and — on the home screen —
+ * their usage statistics. Cropping to the composer makes those structurally
+ * impossible to film rather than merely unlikely. The sidebar is a fixed point
+ * width rather than a fraction so resizing the window cannot start revealing it.
  */
 const SIDEBAR_PT = 330;
-const HEADER_FRACTION = 0.3;
+const HEADER_FRACTION = 0.6;
 
 interface Geometry {
   x: number;
@@ -611,8 +620,9 @@ export async function captureLiveProof(
       await pressCmd("a");
       await wait(400);
       await pressCmd("v");
-      await wait(1800); // let the pasted prompt be readable before it is sent
+      await wait(2200); // let the pasted prompt be readable before it is sent
       await pressSend();
+      await wait(1200); // the send itself, and nothing after it
     } catch (err) {
       // The recording is already rolling and the scripted actions did not
       // happen, so whatever is on tape is unvetted. Stop and destroy it.
@@ -621,12 +631,13 @@ export async function captureLiveProof(
       throw err;
     }
 
-    // Film until the money has actually moved. okx-pay writes a receipt the
-    // moment it settles a call, so the recording ends on the delivery rather
-    // than on an arbitrary timer.
-    receipt = await waitForReceipt(sentAt, config.liveCallTimeoutMs);
-    await wait(receipt ? 3500 : 1500); // hold on the answer
+    // Stop the camera at the send. Claude Desktop runs the request as a
+    // background session and stays on its home screen, which carries the
+    // operator's usage statistics — filming the wait would put those on tape
+    // and show nothing of the work. The wait itself still happens, just
+    // off-camera; the receipt is what reports the outcome.
     await rec.stop();
+    receipt = await waitForReceipt(sentAt, config.liveCallTimeoutMs);
     steps.push({ step: "send the prompt", ok: fs.existsSync(claudePath) });
     steps.push({
       step: "agent settled a paid call",
