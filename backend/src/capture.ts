@@ -508,11 +508,26 @@ async function recordPage(
   let ok = false;
   try {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
-    await wait(2500);
-    // A slow scroll shows more of the artifact than a static frame, and reads
-    // as someone looking at it rather than a screenshot.
-    await page.mouse.wheel(0, 600);
-    await wait(2500);
+
+    await wait(1500);
+
+    // Scroll BEFORE waiting for the artwork, not after. The panels are injected
+    // by script with loading="lazy", so an image below the fold never starts
+    // downloading until it is scrolled into view — waiting first deadlocks
+    // until the timeout and films an empty frame where the comic should be,
+    // which reads as a service that delivered nothing.
+    await page.mouse.wheel(0, 420);
+
+    // Evaluated in the page, so it is written as a string: the backend has no
+    // DOM lib for TypeScript to check a closure against.
+    await page
+      .waitForFunction(
+        "Array.from(document.images).some(i => i.complete && i.naturalWidth > 200)",
+        undefined,
+        { timeout: 30000 },
+      )
+      .catch(() => {});
+    await wait(3500); // hold on the finished artifact
     ok = true;
     steps.push({ step: "open the delivery", ok: true, note: url });
   } catch (err) {
