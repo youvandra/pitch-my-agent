@@ -8,7 +8,7 @@ import { buildSpec, buildScript } from "./spec.js";
 import { synthesizeNarration } from "./voice.js";
 import { writeMusic } from "./music.js";
 import { renderVideo } from "./render.js";
-import { setStage, completeJob, failJob, getJob } from "./store.js";
+import { completeJob, createJob, failJob, getJob, setStage } from "./store.js";
 import type { AgentProfile, Delivery, GeneratePitchInput, NarrationLine, VisualStyle } from "./types.js";
 
 export interface TierSpec {
@@ -22,7 +22,7 @@ export const TIERS: Record<string, TierSpec> = {
 
 /** Rough ETA so a caller knows how long to poll for. */
 export function etaSeconds(): number {
-  return 240;
+  return config.renderEtaSeconds;
 }
 
 function publicUrl(jobId: string, file: string): string {
@@ -127,13 +127,47 @@ export async function runPipeline(jobId: string, input: GeneratePitchInput, tier
   }
 }
 
+/**
+ * Re-run a job the buyer already paid for. Free by design: the payment settled
+ * when the job was accepted, so a failed render owes them a second attempt.
+ */
+export async function retryJob(jobId: string): Promise<Record<string, unknown>> {
+  const job = getJob(jobId);
+  if (!job) return { error: "unknown or expired jobId" };
+  if (job.stage === "done") return { status: "done", jobId, note: "this job already delivered" };
+  if (job.stage !== "failed") {
+    return { status: job.stage, jobId, note: "still running — poll get_job instead" };
+  }
+
+  const tier = TIERS[job.tier] ?? TIERS.animated;
+  createJob({ jobId, input: job.input, tier: job.tier, stage: "queued", startedAt: Date.now() });
+  void runPipeline(jobId, job.input, tier);
+  return {
+    status: "generating",
+    jobId,
+    stage: "queued",
+    etaSeconds: etaSeconds(),
+    note: "re-running at no charge — poll get_job",
+  };
+}
+
 /** Public status view for the free `get_job` tool. */
 export function jobStatus(jobId: string): Record<string, unknown> | null {
   const job = getJob(jobId);
   if (!job) return null;
   if (job.stage === "done" && job.delivery) return { status: "done", ...job.delivery };
   if (job.stage === "failed") {
-    return { status: "failed", jobId, error: job.error ?? "unknown error", charged: false };
+    // Payment settled when the jobId was issued — the facilitator's
+    // authorization window is far shorter than a render, so there is no honest
+    // way to bill on delivery. Saying "charged: false" here was simply untrue.
+    // The compensation is a free re-run instead: same job, no second payment.
+    return {
+      status: "failed",
+      jobId,
+      error: job.error ?? "unknown error",
+      charged: true,
+      remedy: "Call retry_job with this jobId — it re-renders what you already paid for, free.",
+    };
   }
   return {
     status: "generating",

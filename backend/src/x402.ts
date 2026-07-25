@@ -72,7 +72,7 @@ export function paidRoute(routeKey: string, description: string, priceUsd: strin
 
 // Read-only / polling tools stay free so a caller can discover the service and
 // poll a running job without paying. Only generation is metered.
-const FREE_TOOLS = new Set(["get_quota", "get_job", "preview_spec"]);
+const FREE_TOOLS = new Set(["get_quota", "get_job", "retry_job", "preview_spec"]);
 
 /**
  * x402 gate for an MCP endpoint. MCP protocol/discovery methods (initialize,
@@ -183,7 +183,7 @@ export function x402Info(): Record<string, unknown> {
       payTo: config.x402PayTo || null,
     },
     settlement: "on-chain, settled by the OKX facilitator (@okxweb3/x402-express)",
-    free: ["initialize", "tools/list", "get_quota", "get_job", "preview_spec"],
+    free: ["initialize", "tools/list", "get_quota", "get_job", "retry_job", "preview_spec"],
     note:
       "Generation returns a jobId immediately and renders in the background — the " +
       "facilitator's authorization window is far shorter than a full render. Poll " +

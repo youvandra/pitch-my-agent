@@ -5,11 +5,11 @@
 // service before spending anything.
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { config } from "./config.js";
+import { config, hasVoice } from "./config.js";
 import { fetchAgent } from "./okx.js";
 import { buildPalette } from "./palette.js";
 import { buildSpec } from "./spec.js";
-import { jobStatus, TIERS, type TierSpec } from "./pipeline.js";
+import { jobStatus, retryJob, TIERS, type TierSpec } from "./pipeline.js";
 import { x402Info } from "./x402.js";
 import { TIER_PRICING } from "./pricing.js";
 import type { VisualStyle } from "./types.js";
@@ -34,8 +34,11 @@ WHAT IT DOES:
 Give it an agent id. It reads that agent's public profile and services, derives a palette from its logo, writes the script, renders an mp4, and hands back a hosted video URL.
 
 BEFORE YOU CALL generate_pitch:
-- Ask your user whether they want a MALE or FEMALE narrator. It is the most noticeable choice in the result, and changing it means paying for another render. Pass it as the "voice" argument.
-- Narration and on-screen copy are always in English — the audience is the OKX.ai marketplace.
+- Check get_quota: it reports whether this deployment renders with narration or music only, and what one pitch costs.
+- On-screen copy is always in English — the audience is the OKX.ai marketplace.
+
+IF A RENDER FAILS:
+- Payment settles when the job is accepted, not when it is delivered, so a failed render leaves you charged. Call retry_job (FREE) with the same jobId to have it re-rendered at no extra cost.
 
 WHICH TOOL:
 - Want the finished video? -> generate_pitch (paid). Returns a jobId immediately; rendering runs in the background.
@@ -44,8 +47,9 @@ WHICH TOOL:
 - Budgeting? -> get_quota (FREE).
 
 HOW BILLING WORKS:
-- generate_pitch answers fast with a jobId because a full render takes minutes — far longer than the payment authorization window. That is why you poll instead of waiting on the connection.
-- Malformed input is rejected BEFORE payment, and a failed render answers with an error status, so you are not charged for a video you never received.
+- generate_pitch answers fast with a jobId because a full render takes minutes — far longer than the payment authorization window. That is why you poll instead of waiting on the connection, and why payment settles on acceptance rather than on delivery.
+- Malformed input is rejected BEFORE payment, so a bad request costs nothing.
+- A render that fails after acceptance has already been paid for. retry_job re-runs it free; it is the remedy, not a refund.
 
 WHAT YOU GET BACK:
 When get_job reports status "done" it returns the delivery: videoUrl (a downloadable 1080p mp4), thumbnailUrl (poster image), durationSec, resolution, the brand palette used, and the full spec the video was built from. Hand videoUrl to your user — it is a direct link they can play or download.`;
@@ -92,6 +96,19 @@ function registerFreeTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "retry_job",
+    {
+      title: "Re-run a failed job",
+      description:
+        "FREE. Re-render a job that failed. Payment settles when a job is accepted, not when it " +
+        "is delivered — the x402 authorization window is much shorter than a render — so a failed " +
+        "render leaves you already charged. This re-runs it at no extra cost.",
+      inputSchema: { jobId: z.string().describe("The jobId of the failed job.") },
+    },
+    async ({ jobId }) => json(await retryJob(jobId)),
+  );
+
+  server.registerTool(
     "get_quota",
     {
       title: "Get pricing",
@@ -106,7 +123,13 @@ function registerFreeTools(server: McpServer): void {
           animated: {
             endpoint: "/pitch/animated",
             price: `$${config.priceAnimatedUsd}`,
-            includes: "motion-graphics pitch with narration, captions and music",
+            includes: hasVoice()
+              ? "motion-graphics pitch with narration, captions and music"
+              : "motion-graphics pitch with music (narration is disabled on this deployment)",
+            deliverable: "1080p mp4 + poster image, retained 7 days",
+            etaSeconds: config.renderEtaSeconds,
+            billing:
+              "settles when the job is accepted; a failed render can be re-run free with retry_job",
           },
         },
       }),
@@ -143,10 +166,13 @@ export function buildPitchServer(tier: TierSpec, priceUsd: string): McpServer {
           .enum(["male", "female", "neutral"])
           .optional()
           .describe(
-            "Narrator voice. ASK YOUR USER whether they want a male or female narrator before " +
-              "calling this — it is the most noticeable choice in the finished video and cannot be " +
-              "changed without re-rendering (and re-paying). Narration is always in English. " +
-              "Omit only if the user has no preference.",
+            hasVoice()
+              ? "Narrator voice. ASK YOUR USER whether they want a male or female narrator before " +
+                "calling this — it is the most noticeable choice in the finished video and cannot " +
+                "be changed without re-rendering (and re-paying). Narration is always in English. " +
+                "Omit only if the user has no preference."
+              : "Ignored: narration is currently disabled on this deployment, and videos are " +
+                "delivered with music only.",
           ),
       },
     },
