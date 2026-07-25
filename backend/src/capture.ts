@@ -116,9 +116,22 @@ async function keystrokesAvailable(): Promise<boolean> {
   }
 }
 
+/**
+ * Delay between the events of one chord, in milliseconds.
+ *
+ * Without it cliclick fires key-down, text and key-up too fast for the target
+ * app to see them as one chord, and the modifier is dropped: Cmd+N arrives as a
+ * bare "n" typed into whatever field had focus. Observed directly — a run meant
+ * to open a new chat instead typed "n" into an existing conversation and sent
+ * the prompt there.
+ */
+const CHORD_DELAY_MS = "60";
+
 /** Send one cmd-chorded keystroke via cliclick (CGEvent — no Apple Events). */
 async function pressCmd(letter: string): Promise<void> {
-  await execFileP(config.cliclickBin, ["kd:cmd", `t:${letter}`, "ku:cmd"], { timeout: 8000 });
+  await execFileP(config.cliclickBin, ["-w", CHORD_DELAY_MS, "kd:cmd", `t:${letter}`, "ku:cmd"], {
+    timeout: 8000,
+  });
 }
 
 /** Press Escape — dismisses any open modal (Settings, dialogs) harmlessly. */
@@ -135,7 +148,9 @@ async function pressEsc(): Promise<void> {
  * unsent prompt. Cmd+Return sends regardless of shape.
  */
 async function pressSend(): Promise<void> {
-  await execFileP(config.cliclickBin, ["kd:cmd", "kp:return", "ku:cmd"], { timeout: 8000 });
+  await execFileP(config.cliclickBin, ["-w", CHORD_DELAY_MS, "kd:cmd", "kp:return", "ku:cmd"], {
+    timeout: 8000,
+  });
 }
 
 // ─── Reading the result without reading the screen ───────────────────────────
