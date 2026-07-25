@@ -43,33 +43,57 @@ export function contrastRatio(a: string, b: string): number {
 }
 
 /**
- * Pull the most saturated non-neutral colors out of an avatar. Neutrals (white
- * card backgrounds, black outlines) are skipped: a logo on a white square should
- * yield its ink color, not white.
+ * Pull an avatar's identity colors out of it, most telling first.
+ *
+ * Neutrals (white card backgrounds, black outlines) are skipped: a logo on a
+ * white square should yield its ink color, not white.
+ *
+ * Ranking is by salience, not area. Ranking by area returns whatever covers the
+ * most pixels, which on an illustrated avatar is the background — BoredComic's
+ * gave five shades of the same dark red and missed the vivid yellow wordmark
+ * that is the logo's actual identity. Weighting by saturation, and preferring
+ * mid lightness over near-black or near-white, puts a small bright mark ahead of
+ * a large murky field.
+ *
+ * The sample is 160px rather than 64px for the same reason: at 64px a wordmark
+ * is a handful of pixels and averages into its background before it can be
+ * counted.
  */
 export async function extractColors(imageBytes: Buffer, take = 5): Promise<string[]> {
   const { data, info } = await sharp(imageBytes)
-    .resize(64, 64, { fit: "inside" })
+    .resize(160, 160, { fit: "inside" })
     .removeAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
 
-  const buckets = new Map<string, { n: number; r: number; g: number; b: number }>();
+  const buckets = new Map<string, { n: number; r: number; g: number; b: number; sat: number }>();
   for (let i = 0; i < data.length; i += info.channels) {
     const r = data[i], g = data[i + 1], b = data[i + 2];
     const max = Math.max(r, g, b), min = Math.min(r, g, b);
     const sat = max === 0 ? 0 : (max - min) / max;
-    if (sat < 0.25 || max < 32 || min > 235) continue; // skip neutrals
+    // Skip neutrals, and skip colours so dark they cannot serve as a brand
+    // colour on a dark stage: ensureReadable would have to rewrite their
+    // lightness so far that nothing of the original is left, which is how a
+    // vivid red logo ended up as dusty pink.
+    if (sat < 0.25 || max < 90 || min > 235) continue;
     // Quantize to 32-value steps so near-identical pixels group together.
     const key = `${r >> 5}-${g >> 5}-${b >> 5}`;
-    const cur = buckets.get(key) ?? { n: 0, r: 0, g: 0, b: 0 };
-    buckets.set(key, { n: cur.n + 1, r: cur.r + r, g: cur.g + g, b: cur.b + b });
+    const cur = buckets.get(key) ?? { n: 0, r: 0, g: 0, b: 0, sat: 0 };
+    buckets.set(key, { n: cur.n + 1, r: cur.r + r, g: cur.g + g, b: cur.b + b, sat: cur.sat + sat });
   }
 
   return [...buckets.values()]
-    .sort((a, b) => b.n - a.n)
+    .map((c) => {
+      const r = Math.round(c.r / c.n);
+      const g = Math.round(c.g / c.n);
+      const b = Math.round(c.b / c.n);
+      const sat = c.sat / c.n;
+      const lightness = (Math.max(r, g, b) + Math.min(r, g, b)) / 2 / 255;
+      return { hex: hex(r, g, b), score: c.n * sat * sat * (1 - Math.abs(lightness - 0.55)) };
+    })
+    .sort((a, b) => b.score - a.score)
     .slice(0, take)
-    .map((c) => hex(Math.round(c.r / c.n), Math.round(c.g / c.n), Math.round(c.b / c.n)));
+    .map((c) => c.hex);
 }
 
 /** Ask a vision model to turn the avatar + raw colors into a usable palette. */
@@ -159,6 +183,72 @@ function withLightness(color: string, targetL: number): string {
   );
 }
 
+/** Hue of a colour in degrees, 0-360. */
+function hueOf(color: string): number {
+  const n = parseInt(color.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => v / 255);
+  const max = Math.max(r, g, b);
+  const d = max - Math.min(r, g, b);
+  if (d === 0) return 0;
+  let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  h *= 60;
+  return h < 0 ? h + 360 : h;
+}
+
+/** Shortest distance between two hues, 0-180. */
+function hueDistance(a: string, b: string): number {
+  const d = Math.abs(hueOf(a) - hueOf(b)) % 360;
+  return d > 180 ? 360 - d : d;
+}
+
+/** Rotate a colour's hue, keeping its saturation and lightness. */
+function rotateHue(color: string, degrees: number): string {
+  const n = parseInt(color.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => v / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  const sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  const h = (hueOf(color) + degrees + 360) % 360;
+
+  const c = (1 - Math.abs(2 * l - 1)) * sat;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  const [r2, g2, b2] =
+    h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+    : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return (
+    "#" +
+    [r2, g2, b2].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, "0")).join("")
+  );
+}
+
+/** Least hue separation before two colours stop reading as two colours. */
+const MIN_ACCENT_HUE_SEPARATION = 40;
+
+/**
+ * Choose an accent that is actually a second colour.
+ *
+ * Taking the two most common colours from a logo usually takes two shades of
+ * the same one: BoredComic's mark gave #cc5c63 and #ae686c, 1.06 apart in
+ * contrast and 6 degrees apart in hue. Every accent in the video — eyebrows,
+ * prices, rules, badges — then collapsed onto the primary, and the whole piece
+ * read as one flat colour.
+ *
+ * So the accent is the most common candidate that is far enough round the wheel
+ * to be distinguishable. When a logo genuinely is monochrome, rotating the
+ * primary invents the second colour rather than repeating the first.
+ */
+function pickAccent(primary: string, candidates: string[], bg: string): string {
+  const distinct = candidates.find(
+    (c) => hueDistance(c, primary) >= MIN_ACCENT_HUE_SEPARATION,
+  );
+  // 150 degrees: clearly a different colour, without the vibration of a exact
+  // complement sitting next to the primary.
+  return ensureReadable(distinct ?? rotateHue(primary, 150), bg);
+}
+
 /**
  * Force a brand color to be legible against the background.
  *
@@ -208,7 +298,7 @@ export async function buildPalette(
         palette = (await refineWithVision(avatarUrl, extracted, style)) ?? {
           ...fallback,
           primary: ensureReadable(extracted[0], fallback.bg),
-          accent: ensureReadable(extracted[1] ?? extracted[0], fallback.bg),
+          accent: pickAccent(extracted[0], extracted.slice(1), fallback.bg),
           source: "extracted",
         };
       } else {
@@ -217,7 +307,7 @@ export async function buildPalette(
         palette = {
           ...fallback,
           primary: ensureReadable(extracted[0], fallback.bg),
-          accent: ensureReadable(extracted[1] ?? extracted[0], fallback.bg),
+          accent: pickAccent(extracted[0], extracted.slice(1), fallback.bg),
           source: "extracted",
         };
       }
