@@ -80,6 +80,15 @@ async function pressCmd(letter: string): Promise<void> {
   }
 }
 
+/** Press Escape — dismisses any open modal (Settings, dialogs) harmlessly. */
+async function pressEsc(): Promise<void> {
+  try {
+    await execFileP(config.cliclickBin, ["kp:esc"], { timeout: 8000 });
+  } catch (err) {
+    console.warn("cliclick esc failed:", err instanceof Error ? err.message.split("\n")[0] : err);
+  }
+}
+
 // ─── Window geometry (Quartz, read-only, no permission) ──────────────────────
 
 interface Geometry {
@@ -324,6 +333,14 @@ export async function captureLiveProof(jobId: string, agent: AgentProfile): Prom
     // `open -a` brings the app forward without an Apple Event.
     await execFileP("open", ["-a", config.claudeAppName]).catch(() => {});
     await wait(2500);
+
+    // Neutralise window state BEFORE recording starts: a lingering modal
+    // (Settings was open on the last run, exposing billing data on camera)
+    // swallows Cmd+N, and Escape is harmless in a plain chat.
+    await pressEsc();
+    await wait(500);
+    await pressEsc();
+    await wait(500);
 
     const geom = await claudeGeometry();
     const screenIndex = await resolveScreenIndex();
