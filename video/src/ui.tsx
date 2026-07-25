@@ -66,11 +66,32 @@ export type Align = "center" | "left";
  */
 export const CaptionSpace = React.createContext(false);
 
+type StyleKind = "terminal" | "playful" | "saas";
+
+/**
+ * The backdrop motif is where the three styles stop being labels. Terminal
+ * keeps the engineering grid; playful trades it for a dot field; saas drops
+ * the pattern entirely and leans on soft light. Same palette machinery, three
+ * recognisably different stages.
+ */
+const MOTIFS: Record<StyleKind, (theme: Palette) => React.CSSProperties> = {
+  terminal: (theme) => ({
+    backgroundImage: `linear-gradient(${theme.muted}14 1px, transparent 1px), linear-gradient(90deg, ${theme.muted}14 1px, transparent 1px)`,
+    backgroundSize: "88px 88px",
+  }),
+  playful: (theme) => ({
+    backgroundImage: `radial-gradient(${theme.muted}2e 2.5px, transparent 2.5px)`,
+    backgroundSize: "56px 56px",
+  }),
+  saas: () => ({}),
+};
+
 export const Stage: React.FC<{
   theme: Palette;
   align?: Align;
+  styleKind?: StyleKind;
   children: React.ReactNode;
-}> = ({ theme, align = "center", children }) => {
+}> = ({ theme, align = "center", styleKind = "terminal", children }) => {
   const hasCaption = React.useContext(CaptionSpace);
   const frame = useCurrentFrame();
   const drift = Math.sin(frame / 110) * 3;
@@ -92,11 +113,10 @@ export const Stage: React.FC<{
         overflow: "hidden",
       }}
     >
-      {/* faint grid, masked to the centre so edges stay clean */}
+      {/* faint motif, masked to the centre so edges stay clean */}
       <AbsoluteFill
         style={{
-          backgroundImage: `linear-gradient(${theme.muted}14 1px, transparent 1px), linear-gradient(90deg, ${theme.muted}14 1px, transparent 1px)`,
-          backgroundSize: "88px 88px",
+          ...MOTIFS[styleKind](theme),
           maskImage: "radial-gradient(120% 100% at 50% 40%, #000 25%, transparent 78%)",
           WebkitMaskImage: "radial-gradient(120% 100% at 50% 40%, #000 25%, transparent 78%)",
         }}
@@ -221,6 +241,23 @@ export const Counter: React.FC<{
 // The split matters most on the price list, where the numbers are the content.
 
 // ─── Typography ──────────────────────────────────────────────────────────────
+
+/**
+ * The type scale. Two display sizes and two supporting sizes, used everywhere:
+ * scenes picking their own numbers (124, 92, 128…) is why slides read as
+ * cousins rather than one family. A scene may choose WHICH step it uses, never
+ * a size between steps.
+ */
+export const TYPE = {
+  /** Scene-defining statement: hook and cta. */
+  display: 120,
+  /** Working headline: every other scene. */
+  h1: 88,
+  /** Supporting line under a headline. */
+  sub: 34,
+  /** Small mono labels. */
+  label: 24,
+} as const;
 
 export const Eyebrow: React.FC<{ theme: Palette; delay?: number; children: React.ReactNode }> = ({
   theme,

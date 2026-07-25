@@ -51,7 +51,39 @@ export type VisualStyle = "terminal" | "playful" | "saas";
 export type VoiceGender = "male" | "female" | "neutral";
 
 /** Scenes that can carry a spoken line. Mirrors the Remotion scene order. */
-export type SceneKey = "hook" | "problem" | "reveal" | "services" | "cta";
+export type SceneKey = "hook" | "problem" | "reveal" | "demo" | "services" | "cta";
+
+// ─── Demo flow: one call, staged ─────────────────────────────────────────────
+
+/**
+ * What the delivered artifact looks like, so the demo scene can stage a result
+ * that resembles what this agent actually returns — panels for a comic agent,
+ * a chart for a market one — instead of one generic response card for all.
+ */
+export type ResultKind = "image-grid" | "report" | "chart" | "text";
+
+/**
+ * The staged x402 exchange at the centre of the video.
+ *
+ * This is the domain knowledge the video trades on: an OKX.ai service is bought
+ * mid-conversation over x402, and showing that loop — request, 402 challenge,
+ * settlement, delivery — is what separates this from a generic promo template.
+ * The service name and fee are the agent's real listing data; the session
+ * itself is openly a staged illustration, and the scene labels it as such.
+ */
+export interface DemoFlow {
+  /** The concrete request a buyer would send. Carries every input needed. */
+  request: string;
+  /** Real fee of the demoed service, display string, e.g. "$0.50". */
+  price: string;
+  /** Name of the demoed service, from the listing. */
+  serviceName: string;
+  resultKind: ResultKind;
+  /** 2-4 short fragments naming what came back (panel titles, findings, series). */
+  resultLines: string[];
+  /** One line naming the artifact, e.g. "3-page comic · PDF + reader link". */
+  resultCaption?: string;
+}
 
 /**
  * One synthesized voiceover line. `durationSec` is measured from the returned
@@ -104,6 +136,8 @@ export interface VideoSpec {
   reveal: SceneCopy;
   services: ServiceCard[];
   cta: SceneCopy;
+  /** The staged call at the heart of the video. */
+  demoFlow?: DemoFlow;
   /** Backing track, synthesized per job at `bpm` so cuts land on its beat. */
   musicUrl?: string;
   /**

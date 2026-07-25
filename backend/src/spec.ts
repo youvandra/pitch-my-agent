@@ -6,7 +6,10 @@
 import { config, hasAi } from "./config.js";
 import type {
   AgentProfile,
+  AgentService,
+  DemoFlow,
   Palette,
+  ResultKind,
   SceneCopy,
   SceneKey,
   ServiceCard,
@@ -55,6 +58,49 @@ function serviceCards(agent: AgentProfile): ServiceCard[] {
   }));
 }
 
+/** The service the video demos: the cheapest, i.e. the easiest first purchase. */
+function demoService(agent: AgentProfile): AgentService | undefined {
+  if (agent.services.length === 0) return undefined;
+  const fee = (svc: AgentService): number => {
+    const n = Number(svc.fee);
+    return Number.isFinite(n) && n > 0 ? n : Infinity;
+  };
+  return [...agent.services].sort((a, b) => fee(a) - fee(b))[0];
+}
+
+/**
+ * Guess what this agent's delivery looks like from how it describes itself.
+ * Coarse on purpose — the model refines it; this only has to be sane without one.
+ */
+function classifyResult(agent: AgentProfile): ResultKind {
+  const text = `${agent.description} ${agent.services.map((s) => s.description).join(" ")}`.toLowerCase();
+  if (/comic|image|art|illustrat|design|logo|video|photo|picture|nft|avatar/.test(text)) return "image-grid";
+  if (/price|trad|market|chart|swap|token|yield|portfolio|pnl|candle/.test(text)) return "chart";
+  if (/report|scan|audit|analy|research|verif|check|monitor|track|score/.test(text)) return "report";
+  return "text";
+}
+
+/** Deterministic demo flow. Real service name and fee; a generic but honest request. */
+function fallbackDemoFlow(agent: AgentProfile): DemoFlow | undefined {
+  const svc = demoService(agent);
+  if (!svc) return undefined;
+  const kind = classifyResult(agent);
+  const lines: Record<ResultKind, string[]> = {
+    "image-grid": ["Page 1", "Page 2", "Page 3"],
+    chart: ["Signal", "Entry", "Result"],
+    report: ["Summary", "Findings", "Verdict"],
+    text: ["Response", "Details"],
+  };
+  return {
+    request: `Use "${svc.name}" on a representative example and send back the result.`,
+    price: svc.fee ? `$${Number(svc.fee).toFixed(2)}` : "$—",
+    serviceName: svc.name,
+    resultKind: kind,
+    resultLines: lines[kind],
+    resultCaption: svc.name,
+  };
+}
+
 /** Deterministic spec. Always valid, used verbatim when no AI key is set. */
 function fallbackSpec(
   agent: AgentProfile,
@@ -91,6 +137,7 @@ function fallbackSpec(
       headline: `Agent #${agent.agentId}`,
       sub: "Find it on OKX.ai and call it from your own agent.",
     },
+    demoFlow: fallbackDemoFlow(agent),
     bpm: config.bpm,
     durationSec,
   };
@@ -103,6 +150,33 @@ interface AiCopy {
   problemExchange?: { user?: string; agent?: string };
   reveal?: SceneCopy;
   cta?: SceneCopy;
+  demoFlow?: { request?: string; resultKind?: string; resultLines?: string[]; resultCaption?: string };
+}
+
+const RESULT_KINDS = new Set<ResultKind>(["image-grid", "report", "chart", "text"]);
+
+/**
+ * Merge the model's demo copy over the deterministic flow.
+ *
+ * The service name and price never come from the model — they are listing data,
+ * and inventing either would stage a lie. The model only writes the request and
+ * describes the shape of the result.
+ */
+function mergeDemoFlow(base: DemoFlow | undefined, ai: AiCopy["demoFlow"]): DemoFlow | undefined {
+  if (!base) return undefined;
+  if (!ai) return base;
+  const kind = RESULT_KINDS.has(ai.resultKind as ResultKind) ? (ai.resultKind as ResultKind) : base.resultKind;
+  const lines = (ai.resultLines ?? [])
+    .map((l) => clamp(String(l).trim(), 44))
+    .filter((l) => l.length > 0)
+    .slice(0, 4);
+  return {
+    ...base,
+    request: ai.request?.trim() ? clamp(ai.request.trim(), 110) : base.request,
+    resultKind: kind,
+    resultLines: lines.length >= 2 ? lines : base.resultLines,
+    resultCaption: ai.resultCaption?.trim() ? clamp(ai.resultCaption.trim(), 64) : base.resultCaption,
+  };
 }
 
 async function generateCopy(agent: AgentProfile): Promise<AiCopy | null> {
@@ -115,8 +189,15 @@ async function generateCopy(agent: AgentProfile): Promise<AiCopy | null> {
     `Agent: ${agent.name}\nDescription: ${agent.description}\nServices:\n${services}\n\n` +
     `Return ONLY minified JSON: {"tagline":"","hook":{"eyebrow":"","headline":"","sub":""},` +
     `"problem":{"eyebrow":"","headline":"","sub":""},"problemExchange":{"user":"","agent":""},` +
-    `"reveal":{"eyebrow":"","headline":"","sub":""},"cta":{"eyebrow":"","headline":"","sub":""}}\n` +
+    `"reveal":{"eyebrow":"","headline":"","sub":""},"cta":{"eyebrow":"","headline":"","sub":""},` +
+    `"demoFlow":{"request":"","resultKind":"","resultLines":[""],"resultCaption":""}}\n` +
     `Rules: WRITE IN ENGLISH. Headline <= 42 chars, sub <= 120 chars, eyebrow <= 18 chars.\n` +
+    `demoFlow stages one purchase of "${demoService(agent)?.name ?? "the service"}" on screen. ` +
+    `"request" is the exact message a buyer would send — concrete, carrying every needed input, ` +
+    `<= 100 chars. "resultKind" is what the delivery looks like: "image-grid" (pages/panels/art), ` +
+    `"chart" (market/price data), "report" (analysis/verdict), or "text". "resultLines" are 2-4 ` +
+    `fragments naming what came back (panel titles, findings, series), each <= 40 chars. ` +
+    `"resultCaption" names the artifact in one line, <= 60 chars.\n` +
     `problemExchange is a two-line chat staged on screen: "user" is someone asking an AI ` +
     `assistant for the specific thing THIS agent does, and "agent" is that assistant admitting ` +
     `it cannot. Both under 48 chars, natural speech, no mention of the agent's name.\n` +
@@ -171,6 +252,7 @@ export async function buildSpec(
         user: clamp(ai.problemExchange?.user?.trim() || base.problemExchange.user, 52),
         agent: clamp(ai.problemExchange?.agent?.trim() || base.problemExchange.agent, 52),
       },
+      demoFlow: mergeDemoFlow(base.demoFlow, ai.demoFlow),
     };
   } catch (err) {
     console.error(`spec copy generation failed for agent ${agent.agentId}:`, err);
@@ -201,6 +283,7 @@ function fallbackScript(spec: VideoSpec, agent: AgentProfile): ScriptLine[] {
       scene: "reveal",
       text: `It exposes ${count} service${count === 1 ? "" : "s"} your agent can call directly, and pay for per call.`,
     },
+    { scene: "demo", text: "One call does it: the request goes in, x402 settles the payment, the work comes back." },
     { scene: "services", text: "Every service is priced up front, so your agent can budget before it spends." },
     { scene: "cta", text: `Find agent number ${spec.agentId} on OKX dot AI.` },
   ];
@@ -215,7 +298,7 @@ async function generateScript(spec: VideoSpec, agent: AgentProfile): Promise<Scr
     `The following text is ALREADY on screen — do not repeat it, narrate around it:\n` +
     `- hook: "${spec.hook.headline}"\n- problem: "${spec.problem.headline}"\n` +
     `- reveal: "${spec.reveal.headline}"\n- cta: "${spec.cta.headline}"\n\n` +
-    `Return ONLY minified JSON: {"hook":"","problem":"","reveal":"","services":"","cta":""}\n` +
+    `Return ONLY minified JSON: {"hook":"","problem":"","reveal":"","demo":"","services":"","cta":""}\n` +
     `Rules: WRITE IN ENGLISH regardless of the agent's own language. One sentence per scene, ` +
     `8-22 words, spoken register (contractions are fine). ` +
     `Write numbers and symbols as they should be SPOKEN ("dot AI", "two dollars"), never as digits or symbols. ` +
@@ -240,7 +323,7 @@ async function generateScript(spec: VideoSpec, agent: AgentProfile): Promise<Scr
   if (!match) return null;
 
   const parsed = JSON.parse(match[0]) as Partial<Record<SceneKey, string>>;
-  const order: SceneKey[] = ["hook", "problem", "reveal", "services", "cta"];
+  const order: SceneKey[] = ["hook", "problem", "reveal", "demo", "services", "cta"];
   const lines = order
     .map((scene) => ({ scene, text: (parsed[scene] ?? "").trim() }))
     .filter((l) => l.text.length > 0);

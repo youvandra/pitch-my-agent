@@ -27,7 +27,7 @@ export const serviceCardSchema = z.object({
 });
 
 export const narrationLineSchema = z.object({
-  scene: z.enum(["hook", "problem", "reveal", "live", "services", "cta"]),
+  scene: z.enum(["hook", "problem", "reveal", "demo", "services", "cta"]),
   text: z.string(),
   audioUrl: z.string(),
   durationSec: z.number(),
@@ -36,6 +36,15 @@ export const narrationLineSchema = z.object({
 export const problemExchangeSchema = z.object({
   user: z.string(),
   agent: z.string(),
+});
+
+export const demoFlowSchema = z.object({
+  request: z.string(),
+  price: z.string(),
+  serviceName: z.string(),
+  resultKind: z.enum(["image-grid", "report", "chart", "text"]),
+  resultLines: z.array(z.string()),
+  resultCaption: z.string().optional(),
 });
 
 export const videoSpecSchema = z.object({
@@ -51,6 +60,7 @@ export const videoSpecSchema = z.object({
   reveal: sceneCopySchema,
   services: z.array(serviceCardSchema),
   cta: sceneCopySchema,
+  demoFlow: demoFlowSchema.optional(),
   musicUrl: z.string().optional(),
   narration: z.array(narrationLineSchema).optional(),
   bpm: z.number(),
@@ -58,6 +68,7 @@ export const videoSpecSchema = z.object({
 });
 
 export type Palette = z.infer<typeof paletteSchema>;
+export type DemoFlow = z.infer<typeof demoFlowSchema>;
 export type SceneCopy = z.infer<typeof sceneCopySchema>;
 export type ServiceCard = z.infer<typeof serviceCardSchema>;
 export type NarrationLine = z.infer<typeof narrationLineSchema>;
@@ -67,11 +78,14 @@ export const FPS = 30;
 
 /** Scene weights. Durations are derived from the spec's total length. */
 export const SCENE_WEIGHTS = {
-  hook: 0.2,
-  problem: 0.2,
-  reveal: 0.2,
-  services: 0.26,
-  cta: 0.14,
+  hook: 0.16,
+  problem: 0.16,
+  reveal: 0.15,
+  // The staged x402 call is the argument of the whole video — it gets the
+  // largest share of the runtime.
+  demo: 0.25,
+  services: 0.17,
+  cta: 0.11,
 } as const;
 
 export type SceneName = keyof typeof SCENE_WEIGHTS;
@@ -110,10 +124,15 @@ export function sceneFrames(spec: VideoSpec): Record<SceneName, number> {
 
   const out = {} as Record<SceneName, number>;
 
+  const hasDemo = !!spec.demoFlow;
   const narration = spec.narration ?? [];
   if (narration.length > 0) {
     const spoken = new Map(narration.map((n) => [n.scene, n.durationSec]));
     for (const key of Object.keys(SCENE_WEIGHTS) as SceneName[]) {
+      if (key === "demo" && !hasDemo) {
+        out[key] = 0;
+        continue;
+      }
       const sec = spoken.get(key);
       // A scene nobody narrates still needs to breathe: give it one bar.
       out[key] = sec ? snapUp(Math.round((sec + VO_PAD_SEC) * FPS)) : unit * 2;
@@ -123,6 +142,14 @@ export function sceneFrames(spec: VideoSpec): Record<SceneName, number> {
 
   const total = Math.round(spec.durationSec * FPS);
   const weights: Record<SceneName, number> = { ...SCENE_WEIGHTS };
+  if (!hasDemo) {
+    // Redistribute the demo's share so the piece keeps its length.
+    const spare = weights.demo;
+    const rest = 1 - spare;
+    for (const key of Object.keys(weights) as SceneName[]) {
+      weights[key] = key === "demo" ? 0 : weights[key] + (weights[key] / rest) * spare;
+    }
+  }
   for (const key of Object.keys(weights) as SceneName[]) {
     out[key] = weights[key] === 0 ? 0 : snapUp(Math.round(total * weights[key]));
   }
@@ -167,5 +194,13 @@ export const DEFAULT_SPEC: VideoSpec = {
   ],
   cta: { eyebrow: "Try it", headline: "Agent #6006", sub: "Find it on OKX.ai and call it from your own agent." },
   bpm: 112,
+  demoFlow: {
+    request: "Make a 3-page sci-fi comic: a robot chef enters a cooking contest.",
+    price: "$0.50",
+    serviceName: "Generate Comic Basic",
+    resultKind: "image-grid",
+    resultLines: ["Page 1 — The entry", "Page 2 — The disaster", "Page 3 — The win"],
+    resultCaption: "3-page comic · PDF + reader link",
+  },
   durationSec: 60,
 };

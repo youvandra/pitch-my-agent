@@ -2,7 +2,7 @@ import React from "react";
 import { AbsoluteFill, Audio, Easing, Sequence, interpolate, useCurrentFrame } from "remotion";
 import { sceneFrames, type SceneName, type VideoSpec } from "./schema";
 import { Caption, CaptionSpace } from "./ui";
-import { SceneCta, SceneHook, SceneProblem, SceneReveal, SceneServices } from "./scenes";
+import { SceneCta, SceneDemo, SceneHook, SceneProblem, SceneReveal, SceneServices } from "./scenes";
 
 const FADE = 9;
 
@@ -42,12 +42,13 @@ const Transition: React.FC<{ dur: number; dir: number; children: React.ReactNode
 
 const EASE = Easing.bezier(0.16, 1, 0.3, 1);
 
-const ORDER: SceneName[] = ["hook", "problem", "reveal", "services", "cta"];
+const ORDER: SceneName[] = ["hook", "problem", "reveal", "demo", "services", "cta"];
 
 const COMPONENTS: Record<SceneName, React.FC<{ spec: VideoSpec }>> = {
   hook: SceneHook,
   problem: SceneProblem,
   reveal: SceneReveal,
+  demo: SceneDemo,
   services: SceneServices,
   cta: SceneCta,
 };
