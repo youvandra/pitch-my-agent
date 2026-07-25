@@ -95,10 +95,13 @@ export async function runPipeline(jobId: string, input: GeneratePitchInput, tier
     // The bed is generated last, because it has to be exactly as long as the
     // finished edit — which is only known once narration has set the pacing.
     try {
-      const file = writeMusic(jobId, spec.durationSec, spec.bpm, `${agent.agentId}:${style}`);
-      spec.musicUrl = publicUrl(jobId, file);
+      const track = writeMusic(jobId, spec.durationSec, spec.bpm, `${agent.agentId}:${style}`, spec.style);
+      spec.musicUrl = publicUrl(jobId, track.file);
+      // A licensed track brings its own tempo, and the template cuts to
+      // spec.bpm — so the grid has to follow the music, not the other way round.
+      spec.bpm = track.bpm;
     } catch (err) {
-      console.error(`music synthesis failed for job ${jobId}, rendering without it:`, err);
+      console.error(`could not prepare a backing track for job ${jobId}, rendering silent:`, err);
     }
 
     setStage(jobId, "rendering");

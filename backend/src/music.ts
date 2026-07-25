@@ -1,10 +1,13 @@
-// Backing track synthesis — pure Node, no dependencies.
+// The backing track: a licensed file when one is available, synthesis otherwise.
 //
-// The track is generated per job rather than licensed, which is what makes the
-// beat grid possible: the tempo is an input, so every cut and every line lands
-// on a known beat (see docs/VIDEO_CRAFT.md). It is also seeded by agent id, so
-// two agents do not get an identical bed while the same agent stays consistent
-// across re-renders.
+// Everything in the template is cut to a beat grid, so the tempo cannot be a
+// mystery — that is why synthesis existed at all: generating the bed made the
+// BPM an input. A library keeps that property by carrying the tempo in the
+// filename (`terminal-112.mp3`), which is the whole trick: real music, still
+// beat-locked.
+//
+// Either way the choice is seeded by agent id, so two agents do not share a bed
+// while the same agent stays consistent across re-renders.
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
@@ -156,8 +159,71 @@ export function synthesizeMusic(durationSec: number, bpm: number, seedText: stri
   return out;
 }
 
-/** Write the bed as a stereo WAV into the job directory; returns the filename. */
-export function writeMusic(jobId: string, durationSec: number, bpm: number, seedText: string): string {
+/** A track from the library: the file to copy, and the tempo to cut to. */
+export interface Track {
+  file: string;
+  bpm: number;
+}
+
+/**
+ * Pick a licensed track for this style, or null when the library has nothing.
+ *
+ * Files are named `<style>-<bpm>.<ext>`; the tempo has to be declared because
+ * the entire template is quantized to it. A track whose name does not carry a
+ * tempo is skipped rather than guessed at — a wrong BPM desynchronises every
+ * cut in the video, which is worse than falling back to synthesis.
+ */
+function pickTrack(style: string, seedText: string): Track | null {
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(config.musicDir);
+  } catch {
+    return null; // no library configured — synthesis it is
+  }
+
+  const parsed = entries
+    .map((name) => ({ name, m: /^([a-z0-9]+)-(\d{2,3})\.(mp3|m4a|wav|aac)$/i.exec(name) }))
+    .filter((e): e is { name: string; m: RegExpExecArray } => e.m !== null)
+    .map((e) => ({ name: e.name, style: e.m[1].toLowerCase(), bpm: Number(e.m[2]) }));
+
+  if (parsed.length === 0) return null;
+
+  // Prefer this style's own tracks; fall back to the whole library so a partly
+  // stocked directory still beats synthesis.
+  const pool = parsed.filter((t) => t.style === style.toLowerCase());
+  const chosen = (pool.length > 0 ? pool : parsed).sort((a, b) => a.name.localeCompare(b.name));
+  const track = chosen[Math.floor(seedFrom(seedText) * chosen.length) % chosen.length];
+  return { file: path.join(config.musicDir, track.name), bpm: track.bpm };
+}
+
+/**
+ * Put a backing track in the job directory. Returns the filename and the tempo
+ * the video must be cut to — the caller uses that as the grid, so a library
+ * track's own tempo wins over the configured default.
+ */
+export function writeMusic(
+  jobId: string,
+  durationSec: number,
+  bpm: number,
+  seedText: string,
+  style = "terminal",
+): Track {
+  const dir = path.join(config.outputDir, jobId);
+  fs.mkdirSync(dir, { recursive: true });
+
+  const licensed = pickTrack(style, seedText);
+  if (licensed) {
+    const ext = path.extname(licensed.file);
+    const name = `music${ext}`;
+    fs.copyFileSync(licensed.file, path.join(dir, name));
+    return { file: name, bpm: licensed.bpm };
+  }
+
+  return { file: writeSynthesized(jobId, durationSec, bpm, seedText), bpm };
+}
+
+/** Write the synthesized bed as a stereo WAV; returns the filename. */
+function writeSynthesized(jobId: string, durationSec: number, bpm: number, seedText: string): string {
   const pcm = synthesizeMusic(durationSec, bpm, seedText);
   const header = Buffer.alloc(44);
   header.write("RIFF", 0);

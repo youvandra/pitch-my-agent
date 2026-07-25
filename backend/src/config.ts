@@ -62,6 +62,7 @@ export const config = {
   // Honest ETA for THIS host. A 60s pitch renders in ~2 min on a laptop and
   // ~6.5 min on the production VPS; quoting the laptop number makes every
   // buyer think the job has hung.
+  musicDir: process.env.MUSIC_DIR || `${process.cwd()}/../assets/music`,
   renderEtaSeconds: Number(process.env.RENDER_ETA_SECONDS || 420),
   renderConcurrency: Number(process.env.RENDER_CONCURRENCY || "1"),
   // Delete every other job's output before rendering. Only ever for local

@@ -55,6 +55,7 @@ const COMPONENTS: Record<SceneName, React.FC<{ spec: VideoSpec }>> = {
 
 export const Video: React.FC<VideoSpec> = (spec) => {
   const frames = sceneFrames(spec);
+  const total = Object.values(frames).reduce((a, b) => a + b, 0);
   // Narration is keyed by scene so a line always plays over the scene it
   // describes, however long the grid made that scene.
   const voice = new Map((spec.narration ?? []).map((n) => [n.scene, n]));
@@ -64,7 +65,19 @@ export const Video: React.FC<VideoSpec> = (spec) => {
     <AbsoluteFill style={{ background: spec.theme.bg }}>
       {/* Music runs the whole length, well under the voice: it carries the pulse
           the cuts are quantized to, it should never compete with narration. */}
-      {spec.musicUrl ? <Audio src={spec.musicUrl} volume={0.22} /> : null}
+      {/* A licensed track is longer than the edit and would otherwise stop dead
+          on the final frame; the last two seconds fade it out instead. */}
+      {spec.musicUrl ? (
+        <Audio
+          src={spec.musicUrl}
+          volume={(f) =>
+            interpolate(f, [0, 20, total - 60, total], [0, 0.22, 0.22, 0], {
+              extrapolateLeft: "clamp",
+              extrapolateRight: "clamp",
+            })
+          }
+        />
+      ) : null}
       {ORDER.map((name, index) => {
         const dur = frames[name];
         // A zero-length scene is skipped entirely.
