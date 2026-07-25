@@ -36,7 +36,7 @@ async function withRenderSlot<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-function spawnRemotion(args: string[]): Promise<void> {
+function runRemotion(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = execFile(
       "npx",
@@ -49,6 +49,31 @@ function spawnRemotion(args: string[]): Promise<void> {
     );
     child.on("error", reject);
   });
+}
+
+/** Chromium could not be started in time — a contention failure, not a bad spec. */
+const isBrowserStartupTimeout = (err: unknown): boolean =>
+  err instanceof Error && /setting up the headless browser/i.test(err.message);
+
+/**
+ * Run Remotion, retrying once when Chromium fails to start in time.
+ *
+ * On the live-proof tier the render begins moments after the screen capture,
+ * while the machine is still winding down a non-headless Chromium and an ffmpeg
+ * grab. Remotion's own browser-setup timeout fires at 30s and takes the whole
+ * job with it, even though a second attempt on a quiet machine succeeds. Only
+ * this one failure is retried: everything else is a real error and should
+ * surface immediately.
+ */
+async function spawnRemotion(args: string[]): Promise<void> {
+  try {
+    await runRemotion(args);
+  } catch (err) {
+    if (!isBrowserStartupTimeout(err)) throw err;
+    console.warn("remotion could not start Chromium in time — retrying once");
+    await new Promise((r) => setTimeout(r, 5000));
+    await runRemotion(args);
+  }
 }
 
 /**
