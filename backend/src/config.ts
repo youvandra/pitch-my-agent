@@ -32,7 +32,14 @@ export const config = {
   // that spends money per run, so it can be turned off while iterating on the
   // visuals without touching the code that uses it.
   voiceEnabled: process.env.VOICE_ENABLED !== "false",
-  elevenApiKey: process.env.ELEVENLABS_API_KEY || "",
+  /**
+   * ElevenLabs keys, tried in order. A second key is not redundancy for
+   * outages — it is for the credit ceiling: the first key runs dry mid-month
+   * and every render after that is silent until someone notices.
+   */
+  elevenApiKeys: [process.env.ELEVENLABS_API_KEY, process.env.ELEVENLABS_API_KEY_2]
+    .map((k) => (k || "").trim())
+    .filter((k) => k.length > 0),
   // Optional: leave empty to auto-resolve a voice from the account (see
   // voice.ts). ElevenLabs retires its current default voices after 2026-12-31,
   // so pinning a legacy premade id is a scheduled outage.
@@ -73,4 +80,4 @@ export const config = {
 
 export const hasAi = (): boolean => !!config.sumopodApiKey;
 export const hasVision = (): boolean => !!config.sumopodApiKey && !!config.sumopodVisionModel;
-export const hasVoice = (): boolean => config.voiceEnabled && !!config.elevenApiKey;
+export const hasVoice = (): boolean => config.voiceEnabled && config.elevenApiKeys.length > 0;

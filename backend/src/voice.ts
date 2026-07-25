@@ -111,9 +111,9 @@ async function resolveVoiceId(gender: VoiceGender): Promise<string> {
   const cached = resolved.get(gender);
   if (cached) return cached;
 
-  const res = await fetch("https://api.elevenlabs.io/v1/voices", {
-    headers: { "xi-api-key": config.elevenApiKey },
-  });
+  const res = await withKey((key) =>
+    fetch("https://api.elevenlabs.io/v1/voices", { headers: { "xi-api-key": key } }),
+  );
   if (!res.ok) {
     throw new Error(
       `Could not list ElevenLabs voices (${res.status}). Set ELEVENLABS_VOICE_ID explicitly.`,
@@ -146,13 +146,52 @@ async function resolveVoiceId(gender: VoiceGender): Promise<string> {
   return pick.id;
 }
 
+/**
+ * Index of the key currently in use. Once a key is exhausted the next render
+ * should not rediscover that from scratch, so the advance is remembered.
+ */
+let activeKey = 0;
+
+/** True when the response says this key is out of credit rather than broken. */
+function isQuotaExhausted(status: number, body: string): boolean {
+  return status === 401 || status === 402 || (status === 429 && /quota|credit/i.test(body));
+}
+
+/**
+ * Run a request against each configured key in turn.
+ *
+ * A key that has run out of credit fails every request identically, so without
+ * this the whole deployment goes silent the moment the first key hits its
+ * ceiling — and silently, since a failed voiceover degrades to a music-only
+ * video rather than an error. Keys are tried in order and the working one
+ * sticks for subsequent calls.
+ */
+async function withKey(run: (key: string) => Promise<Response>): Promise<Response> {
+  const keys = config.elevenApiKeys;
+  let last: Response | null = null;
+  for (let i = 0; i < keys.length; i++) {
+    const index = (activeKey + i) % keys.length;
+    const res = await run(keys[index]);
+    if (res.ok) {
+      activeKey = index;
+      return res;
+    }
+    const body = await res.clone().text().catch(() => "");
+    if (!isQuotaExhausted(res.status, body)) return res; // a real error — surface it
+    console.warn(`voiceover: ElevenLabs key ${index + 1}/${keys.length} exhausted (${res.status})`);
+    last = res;
+  }
+  return last ?? new Response("no ElevenLabs key configured", { status: 500 });
+}
+
 async function requestPcm(voiceId: string, text: string, rate: number): Promise<Response> {
-  return fetch(
+  return withKey((key) =>
+    fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=pcm_${rate}`,
     {
       method: "POST",
       headers: {
-        "xi-api-key": config.elevenApiKey,
+        "xi-api-key": key,
         "Content-Type": "application/json",
         Accept: "audio/pcm",
       },
@@ -167,6 +206,7 @@ async function requestPcm(voiceId: string, text: string, rate: number): Promise<
         },
       }),
     },
+  ),
   );
 }
 
