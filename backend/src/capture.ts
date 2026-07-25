@@ -121,9 +121,16 @@ async function pressEsc(): Promise<void> {
   await execFileP(config.cliclickBin, ["kp:esc"], { timeout: 8000 });
 }
 
-/** Send the prompt. */
-async function pressReturn(): Promise<void> {
-  await execFileP(config.cliclickBin, ["kp:return"], { timeout: 8000 });
+/**
+ * Send the prompt with Cmd+Return.
+ *
+ * Plain Return only sends a single-line composer. The pasted prompt is several
+ * lines, and in that state Return inserts another newline and the message just
+ * sits there — which is exactly how the first run recorded three minutes of an
+ * unsent prompt. Cmd+Return sends regardless of shape.
+ */
+async function pressSend(): Promise<void> {
+  await execFileP(config.cliclickBin, ["kd:cmd", "kp:return", "ku:cmd"], { timeout: 8000 });
 }
 
 // ─── Reading the result without reading the screen ───────────────────────────
@@ -599,7 +606,7 @@ export async function captureLiveProof(
     try {
       await pressCmd("v");
       await wait(1800); // let the pasted prompt be readable before it is sent
-      await pressReturn();
+      await pressSend();
     } catch (err) {
       // The recording is already rolling and the scripted actions did not
       // happen, so whatever is on tape is unvetted. Stop and destroy it.
