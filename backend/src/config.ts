@@ -55,6 +55,10 @@ export const config = {
   outputDir: process.env.OUTPUT_DIR || "/tmp/pitch-my-agent",
   outputTtlMs: Number(process.env.OUTPUT_TTL_MS || "604800000"),
   renderTimeoutMs: Number(process.env.RENDER_TIMEOUT_MS || "900000"),
+  // Chromium tabs Remotion opens per render. Unset uses Remotion's own default,
+  // which assumes a workstation; a small VPS needs this pinned to 1 or the
+  // render is OOM-killed mid-frame.
+  remotionConcurrency: process.env.REMOTION_CONCURRENCY || "",
   renderConcurrency: Number(process.env.RENDER_CONCURRENCY || "1"),
   // Delete every other job's output before rendering. Only ever for local
   // iteration — in production this would destroy deliveries buyers paid for.

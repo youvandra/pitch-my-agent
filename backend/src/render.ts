@@ -183,6 +183,7 @@ export async function renderVideo(jobId: string, spec: VideoSpec): Promise<Rende
         `--props=${propsPath}`,
         "--codec=h264",
         "--log=error",
+        ...(config.remotionConcurrency ? [`--concurrency=${config.remotionConcurrency}`] : []),
       ]);
 
       // Poster frame for the delivery payload and marketplace previews.
