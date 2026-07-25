@@ -66,9 +66,13 @@ function totalWithNarration(bpm: number, narration: NarrationLine[]): number {
  * fails: a live-proof job then delivers the animated cut instead of nothing.
  * The caller is told, so the tier can be honest about what it produced.
  */
-async function recordLiveSegment(jobId: string, agent: AgentProfile): Promise<string | undefined> {
+async function recordLiveSegment(
+  jobId: string,
+  agent: AgentProfile,
+  demoRequest?: string,
+): Promise<string | undefined> {
   try {
-    const result = await captureLiveProof(jobId, agent);
+    const result = await captureLiveProof(jobId, agent, demoRequest);
     if (!result) return undefined;
     const failed = result.steps.filter((s) => !s.ok);
     if (failed.length > 0) {
@@ -99,7 +103,7 @@ export async function runPipeline(jobId: string, input: GeneratePitchInput, tier
 
     if (tier.liveSegment && input.includeLiveSegment !== false) {
       setStage(jobId, "recording_live");
-      const liveSegmentUrl = await recordLiveSegment(jobId, agent);
+      const liveSegmentUrl = await recordLiveSegment(jobId, agent, spec.demoRequest);
       if (liveSegmentUrl) spec.liveSegmentUrl = liveSegmentUrl;
     }
 

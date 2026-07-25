@@ -68,6 +68,7 @@ function fallbackSpec(
       headline: `Agent #${agent.agentId}`,
       sub: "Find it on OKX.ai and call it from your own agent.",
     },
+    demoRequest: fallbackDemoRequest(agent),
     bpm: config.bpm,
     durationSec,
   };
@@ -80,6 +81,23 @@ interface AiCopy {
   problemExchange?: { user?: string; agent?: string };
   reveal?: SceneCopy;
   cta?: SceneCopy;
+  demoRequest?: string;
+}
+
+/**
+ * Deterministic stand-in for the AI-written demo request.
+ *
+ * Without a model we cannot invent a specific brief that suits an arbitrary
+ * agent, so this asks the agent to choose the specifics itself. That still
+ * beats the bare "Use now" text, which leaves the agent with nothing to act on.
+ */
+function fallbackDemoRequest(agent: AgentProfile): string | undefined {
+  const svc = agent.services[0];
+  if (!svc) return undefined;
+  return (
+    `For this run, use "${svc.name}" with a representative example of your own choosing ` +
+    `and go ahead without asking me for further details.`
+  );
 }
 
 async function generateCopy(agent: AgentProfile): Promise<AiCopy | null> {
@@ -92,8 +110,14 @@ async function generateCopy(agent: AgentProfile): Promise<AiCopy | null> {
     `Agent: ${agent.name}\nDescription: ${agent.description}\nServices:\n${services}\n\n` +
     `Return ONLY minified JSON: {"tagline":"","hook":{"eyebrow":"","headline":"","sub":""},` +
     `"problem":{"eyebrow":"","headline":"","sub":""},"problemExchange":{"user":"","agent":""},` +
-    `"reveal":{"eyebrow":"","headline":"","sub":""},"cta":{"eyebrow":"","headline":"","sub":""}}\n` +
+    `"reveal":{"eyebrow":"","headline":"","sub":""},"cta":{"eyebrow":"","headline":"","sub":""},` +
+    `"demoRequest":""}\n` +
     `Rules: WRITE IN ENGLISH. Headline <= 42 chars, sub <= 120 chars, eyebrow <= 18 chars.\n` +
+    `demoRequest is a real request to send to "${agent.services[0]?.name ?? "this agent"}", written ` +
+    `as one person addressing the agent. It must already contain every input the agent needs, so ` +
+    `it can start work without asking a single follow-up question — a comic agent needs the story ` +
+    `and genre, a wallet scanner needs an address, a shopping agent needs the product. Invent ` +
+    `plausible public example values; never use real personal data. 1-2 sentences, <= 220 chars.\n` +
     `problemExchange is a two-line chat staged on screen: "user" is someone asking an AI ` +
     `assistant for the specific thing THIS agent does, and "agent" is that assistant admitting ` +
     `it cannot. Both under 48 chars, natural speech, no mention of the agent's name.\n` +
@@ -148,6 +172,7 @@ export async function buildSpec(
         user: clamp(ai.problemExchange?.user?.trim() || base.problemExchange.user, 52),
         agent: clamp(ai.problemExchange?.agent?.trim() || base.problemExchange.agent, 52),
       },
+      demoRequest: ai.demoRequest?.trim() ? clamp(ai.demoRequest.trim(), 240) : base.demoRequest,
     };
   } catch (err) {
     console.error(`spec copy generation failed for agent ${agent.agentId}:`, err);

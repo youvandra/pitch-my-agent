@@ -103,6 +103,16 @@ export interface VideoSpec {
   cta: SceneCopy;
   /** Absolute/relative URL of the recorded live segment, when present. */
   liveSegmentUrl?: string;
+  /**
+   * A concrete, ready-to-run request for the agent's first service.
+   *
+   * The marketplace's own "Use now" text only names the service, so the agent
+   * receiving it has to ask a follow-up ("which wallet?", "a comic about
+   * what?") before it can do anything. The live segment is supposed to show
+   * work being done, not an agent asking for clarification — so the pasted
+   * prompt carries the specifics with it.
+   */
+  demoRequest?: string;
   /** Backing track, synthesized per job at `bpm` so cuts land on its beat. */
   musicUrl?: string;
   /**

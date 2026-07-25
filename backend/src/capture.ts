@@ -48,9 +48,14 @@ const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms)
  *
  * Built from the agent's own service metadata rather than scraped from the "Use
  * now" dialog: we already have the data, so the exact text on screen is known and
- * correct. Mirrors OKX's own "Use now" wording.
+ * correct. Mirrors OKX's own "Use now" wording, then adds the brief.
+ *
+ * The marketplace text alone routes the call but says nothing about what to ask
+ * for, so the receiving agent's first move is a clarifying question. `demoRequest`
+ * carries those specifics, which is what turns the recording from "two agents
+ * negotiating" into "the service running".
  */
-function buildPrompt(agent: AgentProfile): string {
+function buildPrompt(agent: AgentProfile, demoRequest?: string): string {
   const svc = agent.services[0];
   const lines = [`I'd like to use the service provided by Agent ${agent.agentId}:`];
   if (svc) {
@@ -59,6 +64,7 @@ function buildPrompt(agent: AgentProfile): string {
     if (svc.endpoint) lines.push(`Endpoint: ${svc.endpoint}`);
   }
   lines.push("Please use OKX Agent Payments Protocol to send a request to this endpoint");
+  if (demoRequest) lines.push("", demoRequest);
   return lines.join("\n");
 }
 
@@ -242,7 +248,11 @@ async function concat(
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-export async function captureLiveProof(jobId: string, agent: AgentProfile): Promise<CaptureResult | null> {
+export async function captureLiveProof(
+  jobId: string,
+  agent: AgentProfile,
+  demoRequest?: string,
+): Promise<CaptureResult | null> {
   if (!config.liveCaptureEnabled) return null;
 
   const outDir = path.join(config.outputDir, jobId);
@@ -260,7 +270,7 @@ export async function captureLiveProof(jobId: string, agent: AgentProfile): Prom
     return null;
   }
 
-  const prompt = buildPrompt(agent);
+  const prompt = buildPrompt(agent, demoRequest);
   const browserPath = path.join(outDir, "browser.webm");
   const claudePath = path.join(outDir, "claude.mp4");
   const outPath = path.join(outDir, "live.mp4");
