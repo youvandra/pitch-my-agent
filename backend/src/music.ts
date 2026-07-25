@@ -168,7 +168,7 @@ export interface Track {
 /**
  * Pick a licensed track for this style, or null when the library has nothing.
  *
- * Files are named `<style>-<bpm>.<ext>`; the tempo has to be declared because
+ * Files are named `<style>-<bpm>[-label].<ext>`; the tempo has to be declared because
  * the entire template is quantized to it. A track whose name does not carry a
  * tempo is skipped rather than guessed at — a wrong BPM desynchronises every
  * cut in the video, which is worse than falling back to synthesis.
@@ -182,7 +182,7 @@ function pickTrack(style: string, seedText: string): Track | null {
   }
 
   const parsed = entries
-    .map((name) => ({ name, m: /^([a-z0-9]+)-(\d{2,3})\.(mp3|m4a|wav|aac)$/i.exec(name) }))
+    .map((name) => ({ name, m: /^([a-z0-9]+)-(\d{2,3})(?:-[a-z0-9-]+)?\.(mp3|m4a|wav|aac)$/i.exec(name) }))
     .filter((e): e is { name: string; m: RegExpExecArray } => e.m !== null)
     .map((e) => ({ name: e.name, style: e.m[1].toLowerCase(), bpm: Number(e.m[2]) }));
 
