@@ -4,7 +4,10 @@ node_modules/
 !.env.example
 dist/
 out/
+# Renders are large and disposable — except the one sample the landing page
+# embeds, which has to travel with the repo for the page to work anywhere.
 *.mp4
+!frontend/sample-*.mp4
 .DS_Store
 scratch/
 PLAN.md
