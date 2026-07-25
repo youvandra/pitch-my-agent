@@ -10,7 +10,7 @@ import { writeMusic } from "./music.js";
 import { captureLiveProof } from "./capture.js";
 import { renderVideo } from "./render.js";
 import { setStage, completeJob, failJob, getJob } from "./store.js";
-import type { Delivery, GeneratePitchInput, NarrationLine, VisualStyle } from "./types.js";
+import type { AgentProfile, Delivery, GeneratePitchInput, NarrationLine, VisualStyle } from "./types.js";
 
 export interface TierSpec {
   id: string;
@@ -66,13 +66,9 @@ function totalWithNarration(bpm: number, narration: NarrationLine[]): number {
  * fails: a live-proof job then delivers the animated cut instead of nothing.
  * The caller is told, so the tier can be honest about what it produced.
  */
-async function recordLiveSegment(
-  jobId: string,
-  agentId: string,
-  agentName: string,
-): Promise<string | undefined> {
+async function recordLiveSegment(jobId: string, agent: AgentProfile): Promise<string | undefined> {
   try {
-    const result = await captureLiveProof(jobId, agentId, agentName);
+    const result = await captureLiveProof(jobId, agent);
     if (!result) return undefined;
     const failed = result.steps.filter((s) => !s.ok);
     if (failed.length > 0) {
@@ -103,7 +99,7 @@ export async function runPipeline(jobId: string, input: GeneratePitchInput, tier
 
     if (tier.liveSegment && input.includeLiveSegment !== false) {
       setStage(jobId, "recording_live");
-      const liveSegmentUrl = await recordLiveSegment(jobId, agent.agentId, agent.name);
+      const liveSegmentUrl = await recordLiveSegment(jobId, agent);
       if (liveSegmentUrl) spec.liveSegmentUrl = liveSegmentUrl;
     }
 
