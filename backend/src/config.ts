@@ -81,6 +81,9 @@ export const config = {
   // How long the recording waits for the agent to settle a paid call before
   // giving up and cutting what it has.
   liveCallTimeoutMs: Number(process.env.LIVE_CALL_TIMEOUT_MS || 180_000),
+  // How long to wait for the paid agent to actually produce its artifact after
+  // settlement. Payment is instant; the work is not.
+  deliveryTimeoutMs: Number(process.env.DELIVERY_TIMEOUT_MS || 240_000),
   claudeAppName: process.env.CLAUDE_APP_NAME || "Claude",
   // cliclick sends keystrokes via CGEvent — Accessibility only, no Apple Events
   // (Automation entitlement is unobtainable for this background process).

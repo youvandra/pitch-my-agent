@@ -178,6 +178,56 @@ async function waitForReceipt(since: number, timeoutMs: number): Promise<CallRec
 }
 
 /**
+ * Seconds the agent said its work would take, if it said.
+ *
+ * Settlement is not delivery. These agents answer the moment they are paid,
+ * with a job id and an estimate, and produce the artifact afterwards — so the
+ * link in that first reply is a promise, not a result.
+ */
+function etaSeconds(receipt: CallReceipt): number {
+  const seen = JSON.stringify(receipt.result ?? {});
+  const match = seen.match(/\\?"etaSeconds\\?"\s*:\s*(\d+)/);
+  const n = match ? Number(match[1]) : 0;
+  return Number.isFinite(n) ? Math.min(n, 240) : 0;
+}
+
+/**
+ * Telling a finished delivery from a placeholder.
+ *
+ * Word matching alone is too blunt — BoredComic's finished reader page mentions
+ * that images "expire" after a day, which a naive check reads as an error. The
+ * reliable signal is shape: a placeholder is a sentence, a delivery is a page.
+ * BoredComic's own pages are 114 bytes versus 5,980.
+ */
+const MIN_DELIVERY_BYTES = 1200;
+const NOT_READY = /not found|no such|still (generating|processing)|please wait/i;
+
+/**
+ * Wait until the delivery is actually servable.
+ *
+ * Opening the link the instant the payment settles films the agent's "not
+ * found" page, which is worse than filming nothing: it shows a paid call that
+ * appears to have produced nothing.
+ */
+async function waitForDelivery(url: string, etaSec: number, timeoutMs: number): Promise<boolean> {
+  if (etaSec > 0) await wait(etaSec * 1000);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+      if (res.ok) {
+        const body = await res.text();
+        if (body.length >= MIN_DELIVERY_BYTES && !NOT_READY.test(body.slice(0, 2000))) return true;
+      }
+    } catch {
+      /* transient — keep polling until the deadline */
+    }
+    await wait(8000);
+  }
+  return false;
+}
+
+/**
  * First http(s) URL anywhere in the delivery.
  *
  * Agents on this marketplace answer with a link far more often than with the
@@ -677,8 +727,10 @@ export async function captureLiveProof(
   // Filmed by Playwright like part 1, which keeps it leak-free.
   let resultRecorded = false;
   const url = receipt ? deliveryUrl(receipt) : null;
-  if (url) {
-    resultRecorded = await recordPage(url, outDir, resultPath, steps);
+  if (url && receipt) {
+    const ready = await waitForDelivery(url, etaSeconds(receipt), config.deliveryTimeoutMs);
+    steps.push({ step: "wait for the delivery", ok: ready, note: ready ? url : "still not servable" });
+    if (ready) resultRecorded = await recordPage(url, outDir, resultPath, steps);
   } else if (receipt) {
     steps.push({ step: "open the delivery", ok: false, note: "the response carried no link to open" });
   }
