@@ -126,7 +126,9 @@ function registerFreeTools(server: McpServer): void {
             includes: hasVoice()
               ? "motion-graphics pitch with narration, captions and music"
               : "motion-graphics pitch with music (narration is disabled on this deployment)",
-            deliverable: "1080p mp4 + poster image, retained 7 days",
+            deliverable: hasVoice()
+              ? "1080p mp4 (roughly 45-70s, the edit follows the narration) + poster image, retained 7 days"
+              : `1080p mp4 (${TIERS.animated.durationSec}s) + poster image, retained 7 days`,
             etaSeconds: config.renderEtaSeconds,
             billing:
               "settles when the job is accepted; a failed render can be re-run free with retry_job",
@@ -154,7 +156,10 @@ export function buildPitchServer(tier: TierSpec, priceUsd: string): McpServer {
     {
       title: "Generate demo video",
       description:
-        `Generate a ${tier.durationSec}s demo video for an agent on the OKX.ai marketplace ($${priceUsd}). ` +
+        `Generate a demo video for an agent on the OKX.ai marketplace ($${priceUsd}). ` +
+        (hasVoice()
+          ? "Runs roughly 45-70 seconds — narrated, and the edit is as long as its narration. "
+          : `Runs ${tier.durationSec} seconds. `) +
         `Reads the agent's profile and services, derives its brand palette from its logo, writes the script, ` +
         `and renders a 1080p mp4` +
         "." +

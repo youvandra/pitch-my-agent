@@ -354,7 +354,8 @@ async function generateScript(spec: VideoSpec, agent: AgentProfile): Promise<Scr
     `- reveal: "${spec.reveal.headline}"\n- cta: "${spec.cta.headline}"\n\n` +
     `Return ONLY minified JSON: {"hook":"","problem":"","reveal":"","demo":"","services":"","cta":""}\n` +
     `Rules: WRITE IN ENGLISH regardless of the agent's own language. One sentence per scene, ` +
-    `8-22 words, spoken register (contractions are fine). ` +
+    `18-26 words, spoken register (contractions are fine) — the delivered video is as long as ` +
+    `its narration, and lines of 8-10 words produce a 30-second pitch that feels rushed. ` +
     `Write numbers and symbols as they should be SPOKEN ("dot AI", "two dollars"), never as digits or symbols. ` +
     `Be concrete about what this agent actually does. No hype, no emoji, no invented features.`;
 
@@ -390,10 +391,13 @@ async function generateScript(spec: VideoSpec, agent: AgentProfile): Promise<Scr
  *
  * The delivered length follows the narration, so an unbounded script means an
  * unbounded video: the same agent at the same tier came back as 19s on one run
- * and 31s on another purely because the model felt chattier. Asking for brevity
- * in the prompt is a request; enforcing it here is a guarantee.
+ * and 31s on another purely because the model felt chattier. Asking for a
+ * length in the prompt is a request; enforcing it here is a guarantee.
+ *
+ * The cap sits well above the requested range rather than at it — clipping a
+ * line mid-thought to save two words reads worse than a slightly long one.
  */
-const MAX_WORDS_PER_LINE = 20;
+const MAX_WORDS_PER_LINE = 26;
 
 /** Trim to a whole sentence if one fits, otherwise to a word boundary. */
 function clampWords(text: string, maxWords: number): string {

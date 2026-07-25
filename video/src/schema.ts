@@ -145,7 +145,11 @@ export function sceneFrames(spec: VideoSpec): Record<SceneName, number> {
       }
       const sec = spoken.get(key);
       // A scene nobody narrates still needs to breathe: give it one bar.
-      out[key] = sec ? snapUp(Math.round((sec + VO_PAD_SEC) * FPS)) : unit * 2;
+      // A floor as well as the line's own length: a scene given three seconds
+      // because its sentence was short still has a composition to build, and
+      // rushing it makes the whole piece feel like a slideshow on fast-forward.
+      const spokenFrames = sec ? snapUp(Math.round((sec + VO_PAD_SEC) * FPS)) : 0;
+      out[key] = Math.max(spokenFrames, unit * 3);
     }
     return out;
   }
