@@ -108,13 +108,6 @@ function registerFreeTools(server: McpServer): void {
             price: `$${config.priceAnimatedUsd}`,
             includes: "motion-graphics pitch with narration, captions and music",
           },
-          "live-proof": {
-            endpoint: TIER_PRICING["live-proof"].endpoint,
-            price: `$${config.priceLiveProofUsd}`,
-            includes:
-              "everything in Animated Pitch, plus a real screen recording of this agent " +
-              "being found and opened on the OKX.ai marketplace, spliced into the middle",
-          },
         },
       }),
   );
@@ -141,7 +134,7 @@ export function buildPitchServer(tier: TierSpec, priceUsd: string): McpServer {
         `Generate a ${tier.durationSec}s demo video for an agent on the OKX.ai marketplace ($${priceUsd}). ` +
         `Reads the agent's profile and services, derives its brand palette from its logo, writes the script, ` +
         `and renders a 1080p mp4` +
-        (tier.liveSegment ? " with a real recording of this agent on the OKX.ai marketplace spliced in." : ".") +
+        "." +
         ` Returns a jobId immediately — poll the free get_job tool for the finished video.`,
       inputSchema: {
         agentId: AGENT_ID,
@@ -155,14 +148,6 @@ export function buildPitchServer(tier: TierSpec, priceUsd: string): McpServer {
               "changed without re-rendering (and re-paying). Narration is always in English. " +
               "Omit only if the user has no preference.",
           ),
-        ...(tier.liveSegment
-          ? {
-              includeLiveSegment: z
-                .boolean()
-                .optional()
-                .describe("Include the recorded marketplace segment (default true)."),
-            }
-          : {}),
       },
     },
     async () =>

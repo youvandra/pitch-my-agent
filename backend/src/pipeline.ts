@@ -7,7 +7,6 @@ import { buildPalette } from "./palette.js";
 import { buildSpec, buildScript } from "./spec.js";
 import { synthesizeNarration } from "./voice.js";
 import { writeMusic } from "./music.js";
-import { captureLiveProof } from "./capture.js";
 import { renderVideo } from "./render.js";
 import { setStage, completeJob, failJob, getJob } from "./store.js";
 import type { AgentProfile, Delivery, GeneratePitchInput, NarrationLine, VisualStyle } from "./types.js";
@@ -15,18 +14,15 @@ import type { AgentProfile, Delivery, GeneratePitchInput, NarrationLine, VisualS
 export interface TierSpec {
   id: string;
   durationSec: number;
-  /** Premium includes the recorded live segment. */
-  liveSegment: boolean;
 }
 
 export const TIERS: Record<string, TierSpec> = {
-  animated: { id: "animated", durationSec: 60, liveSegment: false },
-  "live-proof": { id: "live-proof", durationSec: 100, liveSegment: true },
+  animated: { id: "animated", durationSec: 60 },
 };
 
 /** Rough ETA so a caller knows how long to poll for. */
-export function etaSeconds(tier: TierSpec): number {
-  return tier.liveSegment ? 420 : 240;
+export function etaSeconds(): number {
+  return 240;
 }
 
 function publicUrl(jobId: string, file: string): string {
@@ -59,31 +55,6 @@ function totalWithNarration(bpm: number, narration: NarrationLine[]): number {
   return frames / FPS;
 }
 
-/**
- * Film the marketplace being used with this agent.
- *
- * Returns undefined rather than throwing when capture is off or the recording
- * fails: a live-proof job then delivers the animated cut instead of nothing.
- * The caller is told, so the tier can be honest about what it produced.
- */
-async function recordLiveSegment(jobId: string, agent: AgentProfile): Promise<string | undefined> {
-  try {
-    const result = await captureLiveProof(jobId, agent);
-    if (!result) return undefined;
-    const failed = result.steps.filter((s) => !s.ok);
-    if (failed.length > 0) {
-      console.warn(
-        `live capture completed with ${failed.length} failed step(s): ` +
-          failed.map((s) => s.step).join(", "),
-      );
-    }
-    return publicUrl(jobId, result.file);
-  } catch (err) {
-    console.error(`live capture failed for job ${jobId}:`, err);
-    return undefined;
-  }
-}
-
 export async function runPipeline(jobId: string, input: GeneratePitchInput, tier: TierSpec): Promise<void> {
   try {
     const style: VisualStyle = input.style ?? "terminal";
@@ -97,19 +68,10 @@ export async function runPipeline(jobId: string, input: GeneratePitchInput, tier
     setStage(jobId, "building_spec");
     const spec = await buildSpec(agent, style, theme, tier.durationSec);
 
-    if (tier.liveSegment && input.includeLiveSegment !== false) {
-      setStage(jobId, "recording_live");
-      const liveSegmentUrl = await recordLiveSegment(jobId, agent);
-      if (liveSegmentUrl) spec.liveSegmentUrl = liveSegmentUrl;
-    }
-
     if (input.voiceover !== false) {
       setStage(jobId, "recording_voice");
       const script = await buildScript(spec, agent);
-      // The live scene collapses to nothing when there is no recording, so
-      // narrating it would mean paying for audio that never plays.
-      const speakable = spec.liveSegmentUrl ? script : script.filter((l) => l.scene !== "live");
-      const narration = await synthesizeNarration(jobId, speakable, input.voice);
+      const narration = await synthesizeNarration(jobId, script, input.voice);
       if (narration.length > 0) {
         spec.narration = narration;
         // Once narrated, the voice sets the length: each scene is its line

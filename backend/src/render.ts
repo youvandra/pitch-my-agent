@@ -58,12 +58,10 @@ const isBrowserStartupTimeout = (err: unknown): boolean =>
 /**
  * Run Remotion, retrying once when Chromium fails to start in time.
  *
- * On the live-proof tier the render begins moments after the screen capture,
- * while the machine is still winding down a non-headless Chromium and an ffmpeg
- * grab. Remotion's own browser-setup timeout fires at 30s and takes the whole
- * job with it, even though a second attempt on a quiet machine succeeds. Only
- * this one failure is retried: everything else is a real error and should
- * surface immediately.
+ * Remotion's browser-setup timeout fires at 30s and takes the whole job with
+ * it, though the same spec renders fine once the machine is quiet. Only this
+ * one failure is retried: everything else is a real error and should surface
+ * immediately.
  */
 async function spawnRemotion(args: string[]): Promise<void> {
   try {
@@ -135,7 +133,6 @@ function localizeProps(jobId: string, spec: VideoSpec, origin: string): VideoSpe
 
   return {
     ...spec,
-    liveSegmentUrl: local(spec.liveSegmentUrl),
     musicUrl: local(spec.musicUrl),
     narration: spec.narration?.map((line) => ({
       ...line,

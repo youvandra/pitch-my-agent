@@ -52,7 +52,6 @@ export async function handleNativePaidCall(req: Request, res: Response, tier: Ti
     const input: GeneratePitchInput = {
       agentId: String(args.agentId),
       style: args.style as VisualStyle | undefined,
-      includeLiveSegment: args.includeLiveSegment as boolean | undefined,
       voice: args.voice as VoiceGender | undefined,
     };
     const jobId = `pma_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -77,7 +76,7 @@ export async function handleNativePaidCall(req: Request, res: Response, tier: Ti
         status: "generating",
         stage: "queued",
         tier: tier.id,
-        etaSeconds: etaSeconds(tier),
+        etaSeconds: etaSeconds(),
         next: "Poll the free get_job tool with this jobId every ~15 seconds until it returns the delivery.",
       }),
     );

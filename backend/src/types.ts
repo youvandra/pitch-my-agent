@@ -11,8 +11,8 @@ export interface AgentService {
   endpoint: string;
 }
 
-/** The two marketplace services this ASP sells, one endpoint each. */
-export type TierId = "animated" | "live-proof";
+/** The single service this ASP sells. */
+export type TierId = "animated";
 
 export interface AgentProfile {
   agentId: string;
@@ -51,7 +51,7 @@ export type VisualStyle = "terminal" | "playful" | "saas";
 export type VoiceGender = "male" | "female" | "neutral";
 
 /** Scenes that can carry a spoken line. Mirrors the Remotion scene order. */
-export type SceneKey = "hook" | "problem" | "reveal" | "live" | "services" | "cta";
+export type SceneKey = "hook" | "problem" | "reveal" | "services" | "cta";
 
 /**
  * One synthesized voiceover line. `durationSec` is measured from the returned
@@ -104,8 +104,6 @@ export interface VideoSpec {
   reveal: SceneCopy;
   services: ServiceCard[];
   cta: SceneCopy;
-  /** Absolute/relative URL of the recorded live segment, when present. */
-  liveSegmentUrl?: string;
   /** Backing track, synthesized per job at `bpm` so cuts land on its beat. */
   musicUrl?: string;
   /**
@@ -129,7 +127,6 @@ export type JobStage =
   | "fetching_agent"
   | "building_spec"
   | "extracting_palette"
-  | "recording_live"
   | "recording_voice"
   | "rendering"
   | "packaging"
@@ -139,8 +136,6 @@ export type JobStage =
 export interface GeneratePitchInput {
   agentId: string;
   style?: VisualStyle;
-  /** Include the recorded live segment (premium tier). */
-  includeLiveSegment?: boolean;
   /** Narrate the video. Default true; ignored when no voice provider is set. */
   voiceover?: boolean;
   /** Narrator voice. Default comes from ELEVENLABS_VOICE_GENDER. */

@@ -17,7 +17,6 @@ export const config = {
   xlayerPassphrase: process.env.XLAYER_PASSPHRASE || "",
 
   priceAnimatedUsd: process.env.PRICE_ANIMATED_USD || "2.00",
-  priceLiveProofUsd: process.env.PRICE_LIVE_PROOF_USD || "4.00",
 
   // AI layer. Without a key the deterministic fallback runs, so a video is
   // still produced — just with generic copy and an extraction-only palette.
@@ -61,9 +60,6 @@ export const config = {
   // iteration — in production this would destroy deliveries buyers paid for.
   prunePreviousRenders: process.env.PRUNE_PREVIOUS_RENDERS === "true",
 
-  // Live-proof capture (macOS only). Needs Screen Recording permission for the
-  // process that runs it, and Playwright installed.
-  liveCaptureEnabled: process.env.LIVE_CAPTURE_ENABLED === "true",
 };
 
 export const hasAi = (): boolean => !!config.sumopodApiKey;

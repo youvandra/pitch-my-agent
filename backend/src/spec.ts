@@ -178,7 +178,6 @@ function fallbackScript(spec: VideoSpec, agent: AgentProfile): ScriptLine[] {
       scene: "reveal",
       text: `It exposes ${count} service${count === 1 ? "" : "s"} your agent can call directly, and pay for per call.`,
     },
-    { scene: "live", text: "Here it is on the marketplace, listed and ready to call." },
     { scene: "services", text: "Every service is priced up front, so your agent can budget before it spends." },
     { scene: "cta", text: `Find agent number ${spec.agentId} on OKX dot AI.` },
   ];
@@ -193,7 +192,7 @@ async function generateScript(spec: VideoSpec, agent: AgentProfile): Promise<Scr
     `The following text is ALREADY on screen — do not repeat it, narrate around it:\n` +
     `- hook: "${spec.hook.headline}"\n- problem: "${spec.problem.headline}"\n` +
     `- reveal: "${spec.reveal.headline}"\n- cta: "${spec.cta.headline}"\n\n` +
-    `Return ONLY minified JSON: {"hook":"","problem":"","reveal":"","live":"","services":"","cta":""}\n` +
+    `Return ONLY minified JSON: {"hook":"","problem":"","reveal":"","services":"","cta":""}\n` +
     `Rules: WRITE IN ENGLISH regardless of the agent's own language. One sentence per scene, ` +
     `8-22 words, spoken register (contractions are fine). ` +
     `Write numbers and symbols as they should be SPOKEN ("dot AI", "two dollars"), never as digits or symbols. ` +
@@ -218,7 +217,7 @@ async function generateScript(spec: VideoSpec, agent: AgentProfile): Promise<Scr
   if (!match) return null;
 
   const parsed = JSON.parse(match[0]) as Partial<Record<SceneKey, string>>;
-  const order: SceneKey[] = ["hook", "problem", "reveal", "live", "services", "cta"];
+  const order: SceneKey[] = ["hook", "problem", "reveal", "services", "cta"];
   const lines = order
     .map((scene) => ({ scene, text: (parsed[scene] ?? "").trim() }))
     .filter((l) => l.text.length > 0);

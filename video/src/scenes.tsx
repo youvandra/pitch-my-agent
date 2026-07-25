@@ -7,7 +7,6 @@ import {
   Avatar,
   BlurIn,
   Bubble,
-  LaptopMockup,
   Eyebrow,
   H1,
   MaskLine,
@@ -114,34 +113,6 @@ export const SceneReveal: React.FC<SceneProps> = ({ spec }) => (
     <BlurIn delay={30}>
       <div style={{ fontSize: 32, color: spec.theme.muted, marginTop: 34 }}>{spec.reveal.sub}</div>
     </BlurIn>
-  </Stage>
-);
-
-/**
- * 4 · LIVE — the recording, framed as a laptop on the same stage.
- *
- * No zoom or push-in: the earlier version fought the footage, and a screen
- * recording reads best held still. It sits as a device on the branded
- * background, like every other scene's centrepiece, so the live proof belongs to
- * the pitch rather than taking it over.
- */
-export const SceneLive: React.FC<SceneProps> = ({ spec }) => (
-  <Stage theme={spec.theme} align="center">
-    <Eyebrow theme={spec.theme} delay={2}>
-      Live on OKX.ai
-    </Eyebrow>
-    <Pop delay={8} from={0.92}>
-      <LaptopMockup theme={spec.theme} width={1180}>
-        {spec.liveSegmentUrl ? (
-          <OffthreadVideo
-            src={spec.liveSegmentUrl}
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-          />
-        ) : (
-          <div style={{ width: "100%", height: "100%" }} />
-        )}
-      </LaptopMockup>
-    </Pop>
   </Stage>
 );
 

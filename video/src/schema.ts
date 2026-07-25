@@ -51,7 +51,6 @@ export const videoSpecSchema = z.object({
   reveal: sceneCopySchema,
   services: z.array(serviceCardSchema),
   cta: sceneCopySchema,
-  liveSegmentUrl: z.string().optional(),
   musicUrl: z.string().optional(),
   narration: z.array(narrationLineSchema).optional(),
   bpm: z.number(),
@@ -68,12 +67,11 @@ export const FPS = 30;
 
 /** Scene weights. Durations are derived from the spec's total length. */
 export const SCENE_WEIGHTS = {
-  hook: 0.16,
-  problem: 0.16,
-  reveal: 0.16,
-  live: 0.22,
-  services: 0.2,
-  cta: 0.1,
+  hook: 0.2,
+  problem: 0.2,
+  reveal: 0.2,
+  services: 0.26,
+  cta: 0.14,
 } as const;
 
 export type SceneName = keyof typeof SCENE_WEIGHTS;
@@ -110,17 +108,12 @@ export function sceneFrames(spec: VideoSpec): Record<SceneName, number> {
   const snapUp = (frames: number): number =>
     Math.max(unit * 2, Math.ceil(frames / unit) * unit);
 
-  const hasLive = !!spec.liveSegmentUrl;
   const out = {} as Record<SceneName, number>;
 
   const narration = spec.narration ?? [];
   if (narration.length > 0) {
     const spoken = new Map(narration.map((n) => [n.scene, n.durationSec]));
     for (const key of Object.keys(SCENE_WEIGHTS) as SceneName[]) {
-      if (key === "live" && !hasLive) {
-        out[key] = 0;
-        continue;
-      }
       const sec = spoken.get(key);
       // A scene nobody narrates still needs to breathe: give it one bar.
       out[key] = sec ? snapUp(Math.round((sec + VO_PAD_SEC) * FPS)) : unit * 2;
@@ -130,13 +123,6 @@ export function sceneFrames(spec: VideoSpec): Record<SceneName, number> {
 
   const total = Math.round(spec.durationSec * FPS);
   const weights: Record<SceneName, number> = { ...SCENE_WEIGHTS };
-  if (!hasLive) {
-    const spare = weights.live;
-    const rest = 1 - spare;
-    for (const key of Object.keys(weights) as SceneName[]) {
-      weights[key] = key === "live" ? 0 : weights[key] + (weights[key] / rest) * spare;
-    }
-  }
   for (const key of Object.keys(weights) as SceneName[]) {
     out[key] = weights[key] === 0 ? 0 : snapUp(Math.round(total * weights[key]));
   }

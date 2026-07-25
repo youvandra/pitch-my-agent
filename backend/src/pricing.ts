@@ -4,9 +4,9 @@
 // requires it — so the price is a constant per endpoint, and this module exists
 // only to keep that constant in one place alongside the endpoint it belongs to.
 //
-// An earlier version priced each pitch against the demoed agent's own service
-// fee, because the live tier used to buy a real call to it. It no longer does:
-// the live segment films the marketplace listing, which costs nothing to record.
+// One service, one price. Earlier versions had a second tier that recorded the
+// marketplace, and briefly a third that paid the demoed agent — both are gone;
+// what this sells is the animated pitch.
 import { config } from "./config.js";
 import type { TierId } from "./types.js";
 
@@ -17,5 +17,4 @@ export interface TierPricing {
 
 export const TIER_PRICING: Record<TierId, TierPricing> = {
   animated: { endpoint: "/pitch/animated", priceUsd: Number(config.priceAnimatedUsd) },
-  "live-proof": { endpoint: "/pitch/live-proof", priceUsd: Number(config.priceLiveProofUsd) },
 };

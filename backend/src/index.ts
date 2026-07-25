@@ -36,12 +36,6 @@ const TIER_ROUTES: TierRoute[] = [
     price: config.priceAnimatedUsd,
     desc: "Animated Pitch — motion-graphics demo video for an OKX.ai agent",
   },
-  {
-    path: "/pitch/live-proof",
-    tier: TIERS["live-proof"],
-    price: config.priceLiveProofUsd,
-    desc: "Animated + Live-Proof Pitch — the same video with a real recording of the agent on the OKX.ai marketplace",
-  },
 ];
 
 // ─── MCP transport plumbing ─────────────────────────────────────────────────
@@ -137,7 +131,6 @@ app.get("/x402/info", (_req, res) => {
       endpoint: r.path,
       price: `$${r.price}`,
       durationSec: r.tier.durationSec,
-      liveSegment: r.tier.liveSegment,
     })),
   });
 });
@@ -205,6 +198,6 @@ startCleanup();
 app.listen(config.port, () => {
   console.log(`Pitch My Agent server running on port ${config.port} (x402 mode=${config.x402Mode})`);
   for (const r of TIER_ROUTES) {
-    console.log(`  ${r.path} — $${r.price}, ${r.tier.durationSec}s${r.tier.liveSegment ? ", live segment" : ""}`);
+    console.log(`  ${r.path} — $${r.price}, ${r.tier.durationSec}s`);
   }
 });
