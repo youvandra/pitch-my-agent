@@ -12,14 +12,40 @@ const run = promisify(execFile);
 
 const CLI_TIMEOUT_MS = 30_000;
 
-async function onchainos(args: string[]): Promise<unknown> {
-  const { stdout } = await run(config.onchainosBin, args, {
-    timeout: CLI_TIMEOUT_MS,
-    maxBuffer: 8 * 1024 * 1024,
-  });
-  const parsed = JSON.parse(stdout) as { ok?: boolean; error?: string; data?: unknown };
-  if (parsed.ok === false) throw new Error(parsed.error || "onchainos returned ok:false");
-  return parsed.data;
+/**
+ * Run the CLI, retrying transient failures.
+ *
+ * This lookup is the first step of a job the buyer has already paid for — the
+ * x402 settlement happens when the jobId is issued — so a single hiccup
+ * reaching the marketplace must not cost them the render. Observed in
+ * production: the same call that failed a job succeeded 420ms later on retry.
+ *
+ * Only the transport is retried. `ok:false` is the marketplace answering
+ * properly (no such agent, say), and repeating it would just waste time.
+ */
+async function onchainos(args: string[], attempts = 3): Promise<unknown> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const { stdout } = await run(config.onchainosBin, args, {
+        timeout: CLI_TIMEOUT_MS,
+        maxBuffer: 8 * 1024 * 1024,
+      });
+      const parsed = JSON.parse(stdout) as { ok?: boolean; error?: string; data?: unknown };
+      if (parsed.ok === false) throw new Error(parsed.error || "onchainos returned ok:false");
+      return parsed.data;
+    } catch (err) {
+      lastErr = err;
+      const answered = err instanceof Error && /onchainos returned ok:false/.test(err.message);
+      if (answered || i === attempts - 1) break;
+      console.warn(
+        `onchainos ${args[1]} failed (attempt ${i + 1}/${attempts}), retrying:`,
+        err instanceof Error ? err.message.split("\n")[0] : err,
+      );
+      await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
+    }
+  }
+  throw lastErr;
 }
 
 function str(v: unknown): string {
