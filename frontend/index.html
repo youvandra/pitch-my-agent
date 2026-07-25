@@ -4,124 +4,275 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pitch My Agent — demo videos for OKX.ai agents</title>
-<meta name="description" content="Give it an agent ID, get a ready-to-use demo video. An A2MCP agent service provider on OKX.ai, paid per call over x402.">
+<meta name="description" content="Give it an agent ID, get a narrated 1080p demo video. An A2MCP service provider on OKX.ai, paid per call over x402.">
+<meta property="og:title" content="Pitch My Agent">
+<meta property="og:description" content="Your agent has a listing. It should have a trailer.">
+<meta property="og:image" content="sample-lumora.jpg">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23FF3B30'/><path d='M13 10l9 6-9 6z' fill='white'/></svg>">
 <style>
+  /*
+    The page is built from the same tokens as the videos it sells: the stage
+    grid, the type scale, and the rule that prose is neutral, the agent's mark is
+    primary, and numbers are accent. Reading the page should feel like watching
+    the product.
+  */
   :root{
-    --bg:#05070C; --bg2:#0E131E; --panel:#141B29; --line:#232D40;
-    --text:#F4F1E9; --muted:#93A0B4; --primary:#F2820C; --accent:#FBB454;
+    --bg:#05070C; --bg2:#0E131E; --line:#1E2635;
+    --text:#F4F1E9; --muted:#93A0B4;
+    --primary:#FF3B30;   /* the mark */
+    --accent:#FCCF0F;    /* values: prices, ids, figures */
+    --display:'Inter',ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
   body{
-    margin:0; background:radial-gradient(120% 80% at 50% 0%, var(--bg2) 0%, var(--bg) 55%);
-    color:var(--text); font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
-    line-height:1.55; min-height:100vh;
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--display); line-height:1.6;
+    -webkit-font-smoothing:antialiased;
   }
-  .wrap{max-width:980px;margin:0 auto;padding:64px 24px 96px}
+  /* the stage: the same grid and glow the videos open on */
+  body::before{
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background-image:
+      linear-gradient(rgba(147,160,180,.055) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(147,160,180,.055) 1px,transparent 1px);
+    background-size:88px 88px;
+    -webkit-mask-image:radial-gradient(120% 90% at 50% 0%,#000 20%,transparent 75%);
+    mask-image:radial-gradient(120% 90% at 50% 0%,#000 20%,transparent 75%);
+  }
+  body::after{
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:radial-gradient(58% 42% at 50% -6%,rgba(255,59,48,.16),transparent 62%);
+  }
+  main{position:relative; z-index:1; max-width:1080px; margin:0 auto; padding:0 24px 120px}
+
   .eyebrow{
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px;
-    letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:600;
+    font-family:var(--mono); font-size:12px; letter-spacing:.3em; text-transform:uppercase;
+    color:var(--primary); margin:0 0 18px;
   }
-  h1{font-size:clamp(34px,6vw,60px);line-height:1.06;letter-spacing:-.025em;margin:14px 0 18px}
-  h2{font-size:clamp(22px,3.4vw,30px);letter-spacing:-.02em;margin:56px 0 18px}
-  p.lead{font-size:clamp(17px,2.2vw,21px);color:var(--muted);max-width:64ch;margin:0}
-  .grid{display:grid;gap:16px;margin-top:26px}
-  @media(min-width:720px){.grid.two{grid-template-columns:1fr 1fr}}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px}
-  .card h3{margin:0 0 6px;font-size:19px}
-  .card p{margin:0;color:var(--muted);font-size:15px}
-  .price{
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;
-    color:var(--primary);font-size:22px;float:right
+  h1{
+    font-size:clamp(38px,6.4vw,76px); line-height:1.02; letter-spacing:-.03em;
+    font-weight:800; margin:0 0 20px; text-wrap:balance;
   }
-  ol{color:var(--muted);padding-left:22px;max-width:62ch}
-  ol li{margin-bottom:10px}
-  ol b{color:var(--text);font-weight:600}
+  h2{
+    font-size:clamp(24px,3.2vw,36px); line-height:1.15; letter-spacing:-.02em;
+    font-weight:750; margin:0 0 14px; text-wrap:balance;
+  }
+  p{margin:0 0 16px; color:var(--muted); font-size:17px}
+  .lead{font-size:clamp(17px,2vw,21px); max-width:62ch}
+  a{color:var(--text)}
+  .num{font-family:var(--mono); color:var(--accent); font-weight:600}
+
+  header{padding:88px 0 0; text-align:center}
+  header .lead{margin-inline:auto}
+
+  /* hero: centred, visual below — the layout that tests best for devtools */
+  .stage{
+    margin:44px 0 0; border:1px solid var(--line); border-radius:16px;
+    background:var(--bg2); overflow:hidden;
+    box-shadow:0 60px 140px -60px #000, 0 0 80px -50px rgba(255,59,48,.45);
+  }
+  .stage video{display:block; width:100%; height:auto; background:#000}
+  .stage figcaption{
+    display:flex; flex-wrap:wrap; gap:8px 18px; justify-content:center;
+    padding:14px 18px; border-top:1px solid var(--line);
+    font-family:var(--mono); font-size:12.5px; color:var(--muted);
+  }
+
+  section{padding:88px 0 0; scroll-margin-top:24px}
+
+  .grid{display:grid; gap:20px; margin-top:28px}
+  @media(min-width:760px){ .grid.three{grid-template-columns:repeat(3,1fr)} }
+
+  .card{
+    border:1px solid var(--line); border-radius:14px; background:var(--bg2);
+    padding:24px 24px 22px;
+  }
+  .card h3{margin:0 0 8px; font-size:19px; letter-spacing:-.01em}
+  .card p{margin:0; font-size:15.5px}
+
+  /* the anti-template proof: one system, different builds */
+  .plans{margin-top:28px; border:1px solid var(--line); border-radius:14px; overflow:hidden}
+  .wrapcell{overflow-x:auto}
+  .plans table{width:100%; border-collapse:collapse; font-family:var(--mono); font-size:13.5px}
+  .plans th,.plans td{padding:13px 16px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap}
+  .plans th{color:var(--muted); font-weight:600; letter-spacing:.06em; text-transform:uppercase; font-size:11.5px}
+  .plans tr:last-child td{border-bottom:0}
+  .plans td:first-child{color:var(--text)}
+
+  ol.steps{counter-reset:s; list-style:none; padding:0; margin:28px 0 0; display:grid; gap:14px}
+  ol.steps li{
+    counter-increment:s; position:relative; padding:18px 20px 18px 62px;
+    border:1px solid var(--line); border-radius:12px; background:var(--bg2);
+    color:var(--muted); font-size:15.5px;
+  }
+  ol.steps li::before{
+    content:counter(s,decimal-leading-zero); position:absolute; left:20px; top:17px;
+    font-family:var(--mono); font-size:13px; color:var(--accent); font-weight:700;
+  }
+  ol.steps strong{color:var(--text); font-weight:650}
+
   pre{
-    background:#0A0E16;border:1px solid var(--line);border-radius:12px;
-    padding:18px;overflow-x:auto;font-size:13.5px;color:#D7E0EE
+    margin:24px 0 0; padding:20px 22px; overflow-x:auto;
+    border:1px solid var(--line); border-radius:12px; background:var(--bg2);
+    font-family:var(--mono); font-size:13px; line-height:1.65; color:var(--text);
   }
-  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-  footer{margin-top:72px;padding-top:24px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
-  a{color:var(--accent)}
-  .badges{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}
-  .badge{
-    border:1px solid var(--line);background:var(--panel);border-radius:999px;
-    padding:6px 14px;font-size:13px;color:var(--muted)
+  pre .c{color:var(--muted)}
+  pre .k{color:var(--accent)}
+
+  .price{display:flex; flex-wrap:wrap; align-items:baseline; gap:14px; margin-bottom:6px}
+  .price b{font-family:var(--mono); font-size:44px; color:var(--accent); font-weight:700; letter-spacing:-.02em}
+  .price span{font-family:var(--mono); font-size:13px; color:var(--muted)}
+  ul.plain{margin:14px 0 0; padding-left:20px; color:var(--muted); font-size:15.5px}
+  ul.plain li{margin-bottom:7px}
+
+  footer{
+    margin-top:96px; padding-top:28px; border-top:1px solid var(--line);
+    display:flex; flex-wrap:wrap; gap:10px 26px; align-items:center;
+    font-family:var(--mono); font-size:12.5px; color:var(--muted);
   }
+  footer a{color:var(--muted); text-decoration:none; border-bottom:1px solid var(--line)}
+  footer a:hover{color:var(--text)}
 </style>
 </head>
 <body>
-<div class="wrap">
+<main>
+
   <header>
-    <div class="eyebrow">A2MCP · Agent Service Provider on OKX.ai</div>
-    <h1>Pitch My Agent</h1>
+    <p class="eyebrow">A2MCP service provider · OKX.ai</p>
+    <h1>Your agent has a listing.<br>It should have a trailer.</h1>
     <p class="lead">
-      Every new agent on the marketplace needs a demo video, and making one by hand is slow.
-      Give this service an agent ID and it returns a finished mp4 — scripted from that agent's
-      own profile and services, colored from its own logo.
+      Give it an agent ID. It reads that agent's public profile, services and prices,
+      pulls a palette out of its logo, writes the script, and renders a narrated
+      1080p demo video — cut to the beat of its own soundtrack.
     </p>
-    <div class="badges">
-      <span class="badge">Paid per call over x402</span>
-      <span class="badge">USDT0 on X Layer</span>
-      <span class="badge">1080p mp4</span>
-      <span class="badge">Free script preview</span>
-    </div>
+
+    <figure class="stage">
+      <video src="sample-lumora.mp4" poster="sample-lumora.jpg" controls playsinline preload="metadata"></video>
+      <figcaption>
+        <span>Agent <span class="num">#5175</span> — Lumora Stock Data Hub</span>
+        <span><span class="num">49s</span> · 1080p</span>
+        <span>palette taken from its own logo</span>
+        <span>generated, not edited</span>
+      </figcaption>
+    </figure>
   </header>
 
-  <h2>How it works</h2>
-  <ol>
-    <li><b>Reads the agent</b> — public profile, description, avatar, and every service it sells, straight from the marketplace API.</li>
-    <li><b>Derives its brand palette</b> — dominant colors are extracted from the agent's logo, then refined into a contrast-safe video palette.</li>
-    <li><b>Writes the script</b> — hook, problem, reveal, service cards, and closing call to action.</li>
-    <li><b>Renders</b> — a fixed, props-driven Remotion template produces the mp4. Premium also splices in a real recording of the agent being paid and called.</li>
-    <li><b>Delivers</b> — a hosted video URL, thumbnail, duration, and the full spec that produced it.</li>
-  </ol>
+  <section id="different">
+    <p class="eyebrow">Why it is not a template</p>
+    <h2>Two agents do not get the same video.</h2>
+    <p class="lead">
+      Recolouring one layout is a template with new paint. Every scene role here has
+      several compositions that were actually designed, and the architecture is chosen
+      per agent — by the model when one is configured, by a hash of the agent ID when it
+      is not. Same system, different builds.
+    </p>
 
-  <h2>Tiers</h2>
-  <div class="grid two">
-    <div class="card">
-      <span class="price">$2.00</span>
-      <h3>Standard</h3>
-      <p>A 60-second demo video: intro, problem, reveal, services and pricing, call to action.</p>
+    <div class="plans">
+      <div class="wrapcell">
+        <table>
+          <thead>
+            <tr><th>Agent</th><th>Style</th><th>Hook</th><th>Problem</th><th>Reveal</th><th>Services</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>BoredComic #6006</td><td>playful</td><td>statement</td><td>chat</td><td>card</td><td>list</td></tr>
+            <tr><td>HatchAI #5164</td><td>terminal</td><td>statement</td><td>wall</td><td>card</td><td>hero</td></tr>
+            <tr><td>Lumora #5175</td><td>terminal</td><td>statement</td><td>chat</td><td>banner</td><td>list</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-    <div class="card">
-      <span class="price">$4.00</span>
-      <h3>Premium</h3>
-      <p>100 seconds, plus a recorded live segment showing the agent actually being paid and called.</p>
-    </div>
-  </div>
 
-  <h2>Free tools</h2>
-  <div class="grid two">
-    <div class="card">
-      <h3>preview_spec</h3>
-      <p>The whole plan — copy, service cards, and palette — without rendering. Check it before you pay.</p>
+    <div class="grid three">
+      <div class="card">
+        <h3>Colour with a job</h3>
+        <p>
+          Two colours are pulled from the logo and held to a contract — at least 40° apart
+          in hue, at least 1.8 in contrast. Prose stays neutral, the agent's mark is
+          primary, numbers are accent. Verified against 36 real marketplace palettes.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Cut to the music</h3>
+        <p>
+          The backing track declares its tempo, and every cut, entrance and caption is
+          quantised to that grid. Motion lands on the beat because it is derived from it,
+          not timed against it by eye.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Its own words</h3>
+        <p>
+          Copy, narration and the staged request are written from the agent's real profile
+          and services. Prices and service names come from the listing, never from the
+          model — inventing either would stage a lie.
+        </p>
+      </div>
     </div>
-    <div class="card">
-      <h3>get_job · get_quota</h3>
-      <p>Poll a running render and read live pricing. Neither is ever charged.</p>
-    </div>
-  </div>
+  </section>
 
-  <h2>Call it</h2>
-  <p class="lead" style="font-size:16px">
-    Discovery is free, so any MCP client can connect and list the tools before spending anything.
-  </p>
-  <pre><code>curl -s -X POST https://&lt;host&gt;/pitch/standard \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'</code></pre>
-  <p class="lead" style="font-size:16px">
-    A paid <code>generate_pitch</code> call returns a <code>jobId</code> right away — a full render takes
-    minutes, far longer than the payment authorization window — then you poll the free
-    <code>get_job</code> tool until the delivery comes back.
-  </p>
+  <section id="demo">
+    <p class="eyebrow">The scene at the centre</p>
+    <h2>It shows the purchase, not just the pitch.</h2>
+    <p class="lead">
+      A generic promo tool can put a headline over a logo for anything. What it cannot do
+      is show how an agent on this marketplace is actually bought. The middle of every
+      video stages that loop: the request typed into an x402 session, the
+      <span class="num">402</span> challenge carrying the service's real fee in USDT0 on
+      X Layer, settlement, and the delivery arriving in whatever shape that agent returns —
+      panels for an illustrator, a chart for a market feed, a report for an analyser.
+    </p>
+    <p class="lead">
+      The window is labelled <span class="num">SIMULATED</span>, because the session is a
+      staged illustration. The service name, the price and the protocol are not.
+    </p>
+  </section>
+
+  <section id="how">
+    <p class="eyebrow">How a call goes</p>
+    <h2>Four tools. One of them costs money.</h2>
+    <ol class="steps">
+      <li><strong>preview_spec</strong> — free. The whole plan: script, palette, scene architecture, the staged request. Read it before paying for anything.</li>
+      <li><strong>generate_pitch</strong> — paid. Returns a jobId immediately, because a render outlives the payment authorization window.</li>
+      <li><strong>get_job</strong> — free. Poll every ~15s. Returns the delivery when it is done: video, poster, duration, palette, and the full spec it was built from.</li>
+      <li><strong>retry_job</strong> — free. Payment settles on acceptance, so a failed render leaves you charged. This re-runs it at no extra cost. It is the remedy, not a refund.</li>
+    </ol>
+
+<pre><span class="c"># any MCP client — the endpoint is the service</span>
+POST https://pitchokxai.web.id<span class="k">/pitch/animated</span>
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call",
+ "params":{"name":<span class="k">"generate_pitch"</span>,
+           "arguments":{"agentId":<span class="k">"6006"</span>,"voice":"female"}}}
+
+<span class="c"># -> {"jobId":"pma_…","status":"generating","etaSeconds":420}</span></pre>
+  </section>
+
+  <section id="price">
+    <p class="eyebrow">Price</p>
+    <h2>One service. One number.</h2>
+    <div class="price">
+      <b>$2.00</b><span>USDT0 · X Layer · settled on-chain per call</span>
+    </div>
+    <ul class="plain">
+      <li>1080p mp4 with narration, burned-in captions and a licensed soundtrack</li>
+      <li>Roughly <span class="num">45–70s</span> — a narrated edit is as long as its narration</li>
+      <li>Poster image, a shareable watch page, files kept <span class="num">7 days</span></li>
+      <li>Malformed input is rejected before payment, so a bad request costs nothing</li>
+      <li>Typical render <span class="num">~7 min</span> on the production host</li>
+    </ul>
+  </section>
 
   <footer>
-    Built for the OKX.AI agent marketplace ·
-    <a href="/x402/info">pricing &amp; payment info</a> ·
-    <a href="/health">health</a>
+    <span>Pitch My Agent</span>
+    <a href="/pitch/animated">/pitch/animated</a>
+    <a href="/x402/info">x402 info</a>
+    <a href="https://okx.ai">OKX.ai</a>
+    <span>Built for the OKX.AI Genesis Hackathon</span>
   </footer>
-</div>
+
+</main>
 </body>
 </html>

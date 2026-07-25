@@ -1,143 +1,142 @@
 # Pitch My Agent
 
-**Demo videos for OKX.ai agents.** An A2MCP Agent Service Provider that turns any
-agent on the marketplace into a ready-to-use demo video, paid per call over x402.
+**Your agent has a listing. It should have a trailer.**
 
-Give it an agent ID. It reads that agent's public profile and services, derives a
-palette from its logo, writes the script, renders a 1080p mp4, and hands back a
-hosted video URL.
+An A2MCP Agent Service Provider on OKX.ai. Give it an agent ID; it reads that
+agent's public profile, services and prices, pulls a palette out of its logo,
+writes the script, and renders a narrated 1080p demo video cut to the beat of its
+own soundtrack. Paid per call over x402.
+
+Live: **https://pitchokxai.web.id** · endpoint `POST /pitch/animated` · **$2.00**
+USDT0 on X Layer.
 
 | | |
 |---|---|
-| **Type** | A2MCP — pay-per-call via x402 |
+| **Type** | A2MCP — pay-per-call via x402 v2 |
 | **Network** | X Layer (`eip155:196`), USDT0 |
-| **Standard** | `POST /pitch/standard` · 60s video |
-| **Premium** | `POST /pitch/premium` · 100s + recorded live segment |
-| **Free** | `initialize`, `tools/list`, `preview_spec`, `get_job`, `get_quota` |
+| **Paid tool** | `generate_pitch` — $2.00 |
+| **Free tools** | `preview_spec`, `get_job`, `retry_job`, `get_quota`, plus `initialize` / `tools/list` |
+| **Delivery** | 1080p mp4 (~45–70s narrated), poster image, watch page, kept 7 days |
 
 ---
 
-## Why
+## The problem it actually solves
 
-Every new ASP on the marketplace needs a demo video, and building one by hand is
-slow, manual work. The value here is orchestration, not a single model call: read
-the marketplace API, extract brand colors from a logo, write the copy, drive a
-headless renderer, host the result. An LLM on its own cannot do that.
+Every agent on the marketplace is a name, a paragraph and a price list. Buyers are
+other agents and the people steering them, and none of them can tell from a
+listing what using the thing feels like. Making a demo video by hand is a day's
+work per agent.
+
+The value here is orchestration, not one model call: read the marketplace, extract
+brand colour from a logo under a contrast contract, plan a scene architecture,
+write copy and narration, synthesise speech, pick a beat-matched track, drive a
+headless renderer, host the result, and settle payment on-chain. No single LLM
+call does that.
+
+## Why it is not a template
+
+Recolouring one layout is a template with new paint. Each scene role has several
+compositions that were designed, and the architecture is chosen per agent — by the
+model when one is configured, by a hash of the agent ID when it is not.
+
+| Agent | Style | Hook | Problem | Reveal | Services |
+|---|---|---|---|---|---|
+| BoredComic #6006 | playful | statement | chat | card | list |
+| HatchAI #5164 | terminal | statement | wall | card | hero |
+| Lumora #5175 | terminal | statement | chat | banner | list |
+
+Three guarantees hold that together:
+
+- **Colour has a job.** Two colours come from the logo and are held to a contract:
+  ≥40° apart in hue, ≥1.8 in contrast, both legible on the backdrop. Prose is
+  neutral, the agent's mark is primary, numbers are accent. Verified across 36 real
+  marketplace palettes — the model may propose a palette, it does not decide one.
+- **Motion is derived from the music.** Each licensed track declares its tempo in
+  its filename, and every cut, entrance and caption is quantised to that grid.
+- **Copy is the agent's own.** Service names and prices come from the listing,
+  never from the model. Inventing either would stage a lie.
+
+## The scene at the centre
+
+The middle of every video stages one x402 purchase: the request typed into a
+session, the `402` challenge carrying the service's **real** fee in USDT0 on X
+Layer, settlement, and the delivery arriving in the shape that agent actually
+returns — panels for an illustrator, a chart for a market feed, a report for an
+analyser. The window is labelled `SIMULATED`, because the session is a staged
+illustration. The service name, the price and the protocol are not.
+
+That scene is the part a generic promo tool cannot produce, because it requires
+knowing how an agent on this marketplace is bought.
 
 ## Pipeline
 
 ```
-1. fetch agent    → onchainos agent service-list --agent-id {id}
-                    (structured JSON — never scrapes marketplace HTML)
-2. brand palette  → extract dominant logo colors, then refine into a
-                    contrast-safe video palette (falls back per theme)
-3. VideoSpec      → an LLM writes the copy as DATA, never as code
-4. live segment   → (premium) recording of the agent being paid and called
-5. render         → fixed props-driven Remotion template → mp4 + thumbnail
-6. deliver        → { videoUrl, thumbnailUrl, durationSec, theme, spec }
+1. fetch agent      onchainos agent service-list --agent-id {id}   (retried 3x)
+2. brand palette    dominant logo colours by salience, then the contract above
+3. VideoSpec        an LLM writes DATA — copy, narration, scene plan, demo flow
+4. narration        ElevenLabs; keys tried in order so one dry key is not silence
+5. soundtrack       licensed track for the style, or synthesis if none is present
+6. render           Remotion, props-driven, headless Chromium
+7. deliver          mp4 + poster + watch page, x402 already settled
 ```
 
-The Remotion template is **fixed**; the LLM only fills a `VideoSpec`. A bad model
-response can weaken the copy but can never break the render.
+Every layer degrades rather than fails: no AI key gives a deterministic spec, no
+voice gives a music-only cut, no track gives a synthesised bed, and a failed
+render is re-runnable free with `retry_job`.
 
-## MCP tools
+## Billing, stated plainly
 
-| Tool | Paid? | Returns |
-|---|---|---|
-| `generate_pitch` | yes | `jobId` immediately; renders in the background |
-| `preview_spec` | **free** | The full plan — copy, service cards, palette — without rendering |
-| `get_job` | **free** | Current stage while running, the full delivery when done |
-| `get_quota` | **free** | Live x402 pricing and tiers |
+Payment settles when the job is **accepted**, not when it is delivered — the
+facilitator's authorization window is far shorter than a render, so billing on
+delivery is not available. Consequences, all surfaced in the API:
 
-### Billing behavior
+- Malformed input is rejected **before** payment; a bad request costs nothing.
+- A render that fails after acceptance has already been paid for. `retry_job`
+  re-runs it free. It is the remedy, not a refund.
+- `get_quota` reports whether this deployment renders with narration or music
+  only, the real ETA of the host, and the retry policy.
 
-- **Bad input is rejected before payment.** `mcpPreflight` validates the tool
-  arguments ahead of the payment gate, so a deterministic failure is never charged.
-- **Generation returns a handle, not the video.** A full render takes minutes —
-  far longer than the facilitator's ~300s authorization window — so holding the
-  connection would expire the payment before settlement. The paid call answers
-  fast with a `jobId` and the buyer polls the free `get_job` tool.
-- **Failures are not settled.** A failed render answers `>=400`, and the x402
-  middleware skips settlement on any error response.
-
-Payment code mirrors the BoredComic ASP, which is the reference implementation
-that passed OKX listing review.
-
-## Repo layout
+## Repository
 
 ```
-backend/src/
-  index.ts      Express server: tier endpoints, static hosting, watch page
-  mcp.ts        MCP server + tool definitions (free + paid)
-  native.ts     x402-native paid-call handler (plain JSON in/out, settleable)
-  x402.ts       Payment gate: paidRoute, mcpPaidRoute, preflight, 402 challenge
-  pipeline.ts   Job orchestration: fetch → palette → spec → render → deliver
-  okx.ts        Agent metadata via the onchainos CLI
-  palette.ts    Brand palette from the agent's avatar (extract → refine → fallback)
-  spec.ts       VideoSpec builder (the only AI step for copy)
-  render.ts     Remotion render worker (subprocess, concurrency-capped)
-  store.ts      Job store, disk-mirrored, with TTL cleanup
-  ratelimit.ts  Naive per-IP limiter for the free surface
-  config.ts     Environment configuration
-  types.ts      Shared types
-video/src/
-  Root.tsx      One composition, duration derived from the spec
-  Video.tsx     Scene sequencing + dissolves
-  scenes.tsx    Scenes, all pure functions of the spec
-  ui.tsx        Primitives: Stage, Rise, Pop, Avatar, ServiceRow, BrowserFrame
-  schema.ts     Zod schema mirroring VideoSpec + scene timing
-frontend/
-  index.html    Landing page (no build step)
+backend/    Express + MCP + x402. Orchestration, palette, spec, voice, music.
+video/      Remotion template. Fixed compositions; the spec is props.
+frontend/   Landing page.
+assets/     Avatar, and licensed backing tracks (see assets/music/README.md).
+docs/       VIDEO_CRAFT.md — why the motion is built the way it is.
 ```
 
-## Development
-
-Requires Node.js 20+.
+## Running it
 
 ```bash
-cd backend
-npm install
-cp .env.example .env    # then fill it in
-npm run dev             # tsx watch, defaults to port 3007
+cd backend && npm install && cp .env.example .env   # fill in the keys you have
+cd ../video && npm install && npx remotion browser ensure
+cd ../backend && npm run dev
 ```
+
+With `X402_MODE=off` every endpoint is free, which is the local default. A render
+takes ~2 minutes on a laptop and ~7 on a small VPS; set `RENDER_ETA_SECONDS` to
+whatever the host actually does, because quoting the laptop number makes buyers
+think the job has hung.
 
 ```bash
-cd video
-npm install
-npm run studio          # Remotion studio, previews with DEFAULT_SPEC
+curl -s -X POST localhost:3007/pitch/animated \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
+       "params":{"name":"generate_pitch","arguments":{"agentId":"6006"}}}'
 ```
 
-```bash
-npm run typecheck       # tsc --noEmit
-npm test                # node:test suite
-```
+`npm run typecheck` in either project runs `tsc --noEmit`.
 
-### Configuration
+## Licensing note
 
-| Variable | Required | Default | Purpose |
-|---|---|---|---|
-| `PORT` | no | `3007` | HTTP port |
-| `PUBLIC_BASE_URL` | no | — | Origin for absolute delivery URLs |
-| `X402_MODE` | no | `off` | `off` \| `demo` \| `on` |
-| `X402_PAY_TO` | when on | — | Address that receives settled USDT0 |
-| `XLAYER_API_KEY` / `_SECRET_KEY` / `_PASSPHRASE` | when on | — | Merchant credentials for the facilitator |
-| `PRICE_STANDARD_USD` | no | `2.00` | Standard tier price |
-| `PRICE_PREMIUM_USD` | no | `4.00` | Premium tier price |
-| `SUMOPOD_API_KEY` | no | — | Enables AI copy; without it a deterministic script is used |
-| `SUMOPOD_VISION_MODEL` | no | — | Enables palette refinement; without it extraction-only |
-| `ONCHAINOS_BIN` | no | `onchainos` | Absolute path — spawned processes don't inherit PATH |
-| `VIDEO_PROJECT_DIR` | no | `../video` | Remotion template location |
-| `OUTPUT_DIR` | no | `/tmp/pitch-my-agent` | Rendered output + job records |
-| `RENDER_CONCURRENCY` | no | `1` | Concurrent renders (Chromium is heavy) |
+Backing tracks are from Pixabay under the Pixabay Content License: commercial use
+permitted, attribution not required. Their measured tempos, and the reasoning for
+the three tracks held back, are recorded in `assets/music/LICENCES.md`. Anything
+added to that directory must be cleared for commercial use — nothing in the
+pipeline can verify it, and a buyer receiving an infringing video is the seller's
+problem.
 
-The `XLAYER_*` keys are **seller-side merchant credentials**. They are unrelated
-to the buyer-side agentic-wallet session used when calling other agents.
+---
 
-## Tech stack
-
-- **Backend** — Node.js, TypeScript, Express 5
-- **Agent interface** — Model Context Protocol (Streamable HTTP)
-- **Payments** — x402 v2 via the OKX Payment SDK (`@okxweb3/x402-express`)
-- **Video** — Remotion (props-driven template, headless Chromium render)
-- **Color** — `sharp` for extraction, vision model for refinement
-- **Frontend** — single static HTML page, no build step
+Built for the OKX.AI Genesis Hackathon.
