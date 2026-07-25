@@ -85,9 +85,27 @@ export const SceneProblem: React.FC<SceneProps> = ({ spec }) => {
             {spec.problemExchange.user}
           </Bubble>
         </BlurIn>
-        <BlurIn delay={40} y={16}>
+        {/* a beat of "typing…" before the refusal: the pause is what makes
+            the exchange read as a real conversation and the no land harder */}
+        {frame >= 40 && frame < 66 ? (
+          <div style={{ display: "flex", gap: 7, padding: "16px 22px" }}>
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 5,
+                  background: spec.theme.muted,
+                  opacity: 0.35 + 0.45 * Math.abs(Math.sin((frame - 40) / 6 + i * 1.05)),
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
+        <BlurIn delay={66} y={16}>
           <Bubble theme={spec.theme} from="agent">
-            <span style={{ opacity: interpolate(frame, [40, 56], [0.4, 1], { extrapolateRight: "clamp" }) }}>
+            <span style={{ opacity: interpolate(frame, [66, 80], [0.4, 1], { extrapolateRight: "clamp" }) }}>
               {spec.problemExchange.agent}
             </span>
           </Bubble>
@@ -162,6 +180,17 @@ const DemoResultCard: React.FC<{ spec: VideoSpec; start: number }> = ({ spec, st
                 position: "relative",
               }}
             >
+              {/* what stays once the artwork has "arrived" — an empty black
+                  box reads as a failed load, so the panel keeps a quiet
+                  duotone wash and its page number */}
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: `linear-gradient(145deg, ${theme.primary}1c, transparent 55%, ${theme.accent}14)`,
+                  opacity: interpolate(local - delays[i], [24, 44], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+                }}
+              />
               {/* shimmer: the artwork arriving */}
               <div
                 style={{
@@ -177,8 +206,17 @@ const DemoResultCard: React.FC<{ spec: VideoSpec; start: number }> = ({ spec, st
                   inset: 14,
                   borderRadius: 8,
                   border: `1px dashed ${theme.muted}33`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontFamily: FONT_MONO,
+                  fontSize: 40,
+                  fontWeight: 700,
+                  color: `${theme.text}2e`,
                 }}
-              />
+              >
+                {i + 1}
+              </div>
             </div>
             <div style={{ fontSize: 21, color: theme.muted, marginTop: 10, textAlign: "center" }}>{line}</div>
           </div>
@@ -311,15 +349,20 @@ export const SceneDemo: React.FC<SceneProps> = ({ spec }) => {
   );
 };
 
-/** 5 · SERVICES — the price list, built one row at a time, left aligned. */
-export const SceneServices: React.FC<SceneProps> = ({ spec }) => (
+/** 5 · SERVICES — the price list, built one row at a time, on the beat. */
+export const SceneServices: React.FC<SceneProps> = ({ spec }) => {
+  // Rows arrive on consecutive beats of the actual backing track. The cuts are
+  // already quantized to bars; entrances that land between beats are what makes
+  // motion feel pasted onto the music instead of driven by it.
+  const delays = staggerBeats(makeGrid(spec.bpm), spec.services.length, 1, 1);
+  return (
   <Stage theme={spec.theme} styleKind={spec.style} align="left">
     <Eyebrow theme={spec.theme} delay={2}>
       What it sells
     </Eyebrow>
     <div style={{ display: "flex", flexDirection: "column", gap: 18, width: 1400, marginTop: 6 }}>
       {spec.services.map((s, i) => (
-        <BlurIn key={`${s.name}-${i}`} delay={8 + i * 9} y={22}>
+        <BlurIn key={`${s.name}-${i}`} delay={delays[i]} y={22}>
           <ServiceRow
             theme={spec.theme}
             name={s.name}
@@ -331,7 +374,8 @@ export const SceneServices: React.FC<SceneProps> = ({ spec }) => (
       ))}
     </div>
   </Stage>
-);
+  );
+};
 
 /** 6 · CTA — one line, centred, with the id an agent actually needs. */
 export const SceneCta: React.FC<SceneProps> = ({ spec }) => (
@@ -349,6 +393,23 @@ export const SceneCta: React.FC<SceneProps> = ({ spec }) => (
       <div style={{ display: "flex", alignItems: "center", gap: 20, marginTop: 34 }}>
         <span style={{ fontSize: 32, color: spec.theme.muted }}>available on</span>
         <OkxMark width={190} />
+      </div>
+    </BlurIn>
+    {/* the address itself: a CTA that names a place beats one that names a brand */}
+    <BlurIn delay={44}>
+      <div
+        style={{
+          marginTop: 30,
+          fontFamily: FONT_MONO,
+          fontSize: 27,
+          color: spec.theme.accent,
+          border: `1px solid ${spec.theme.accent}44`,
+          borderRadius: 12,
+          padding: "12px 26px",
+          background: `${spec.theme.accent}0d`,
+        }}
+      >
+        okx.ai/agents/{spec.agentId}
       </div>
     </BlurIn>
   </Stage>
