@@ -9,7 +9,6 @@ import { handleNativePaidCall, PAID_TOOLS } from "./native.js";
 import { rateLimit } from "./ratelimit.js";
 import { initStore, startCleanup, resolveOutputPath, getJob } from "./store.js";
 import { TIERS, jobStatus, type TierSpec } from "./pipeline.js";
-import type { TierId } from "./types.js";
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -41,14 +40,7 @@ const TIER_ROUTES: TierRoute[] = [
     path: "/pitch/live-proof",
     tier: TIERS["live-proof"],
     price: config.priceLiveProofUsd,
-    desc: "Animated + Live-Proof Pitch — the same video with a real screen recording of the agent being used",
-  },
-  {
-    path: "/pitch/live-proof-plus",
-    tier: TIERS["live-proof-plus"],
-    price: config.priceLiveProofPlusUsd,
-    desc:
-      "Live-Proof Pitch (Premium) — same as Live-Proof, for agents whose own service costs more to call",
+    desc: "Animated + Live-Proof Pitch — the same video with a real recording of the agent on the OKX.ai marketplace",
   },
 ];
 
@@ -114,7 +106,7 @@ for (const route of TIER_ROUTES) {
   app.post(
     route.path,
     rateLimit,
-    mcpPreflight(route.tier.id as TierId),
+    mcpPreflight(),
     mcpPaidRoute(`POST ${route.path}`, route.desc, route.price),
     handler,
   );

@@ -13,7 +13,6 @@ import {
   MaskLine,
   OkxMark,
   Pop,
-  ReceiptStrip,
   ServiceRow,
   Stage,
   Swipe,
@@ -143,18 +142,6 @@ export const SceneLive: React.FC<SceneProps> = ({ spec }) => (
         )}
       </LaptopMockup>
     </Pop>
-    {spec.liveProof ? (
-      <Pop delay={20} from={0.96}>
-        <ReceiptStrip
-          theme={spec.theme}
-          amountUsd={spec.liveProof.amountUsd}
-          asset={spec.liveProof.asset}
-          network={spec.liveProof.network}
-          wallet={spec.liveProof.wallet}
-          serviceName={spec.liveProof.serviceName}
-        />
-      </Pop>
-    ) : null}
   </Stage>
 );
 

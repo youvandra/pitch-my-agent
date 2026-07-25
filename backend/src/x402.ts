@@ -7,9 +7,7 @@ import { x402ResourceServer } from "@okxweb3/x402-express";
 import { OKXFacilitatorClient } from "@okxweb3/x402-core";
 import { ExactEvmScheme } from "@okxweb3/x402-evm/exact/server";
 import { config } from "./config.js";
-import { fetchAgent } from "./okx.js";
-import { tierMismatch } from "./pricing.js";
-import type { TierId } from "./types.js";
+
 
 const NETWORK = "eip155:196";
 const USDT0_XLAYER = "0x779ded0c9e1022225f8e0630b35a9b54be713736";
@@ -74,7 +72,7 @@ export function paidRoute(routeKey: string, description: string, priceUsd: strin
 
 // Read-only / polling tools stay free so a caller can discover the service and
 // poll a running job without paying. Only generation is metered.
-const FREE_TOOLS = new Set(["get_quota", "get_quote", "get_job", "preview_spec"]);
+const FREE_TOOLS = new Set(["get_quota", "get_job", "preview_spec"]);
 
 /**
  * x402 gate for an MCP endpoint. MCP protocol/discovery methods (initialize,
@@ -126,7 +124,7 @@ export function send402Challenge(
   res.status(402).json(challenge);
 }
 
-type ToolArgs = { agentId?: unknown; serviceId?: unknown; style?: unknown; jobId?: unknown };
+type ToolArgs = { agentId?: unknown; style?: unknown; jobId?: unknown };
 
 const VALID_STYLES = new Set(["terminal", "playful", "saas"]);
 
@@ -153,48 +151,22 @@ export function preflightError(tool: string, args: ToolArgs | undefined): string
   return null;
 }
 
-/**
- * MCP preflight middleware: validates a tools/call body before the payment gate.
- *
- * As well as malformed input, this rejects a service the tier cannot afford to
- * call. That check needs the target agent's fees, so it is a network round trip
- * — worth it, because the alternative is charging for a live-proof pitch and
- * then delivering one without the live segment that defines it.
- */
-export function mcpPreflight(tier: TierId) {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+/** MCP preflight middleware: validates a tools/call body before the payment gate. */
+export function mcpPreflight() {
+  return (req: Request, res: Response, next: NextFunction): void => {
     const body = req.body as
       | { method?: string; id?: unknown; params?: { name?: string; arguments?: ToolArgs } }
       | undefined;
     if (body?.method !== "tools/call") return next();
 
-    const reject = (message: string): void => {
+    const err = preflightError(body?.params?.name ?? "", body?.params?.arguments);
+    if (err) {
       res.status(400).json({
         jsonrpc: "2.0",
         id: body.id ?? null,
-        error: { code: -32602, message: `Rejected before payment: ${message}` },
+        error: { code: -32602, message: `Rejected before payment: ${err}` },
       });
-    };
-
-    const err = preflightError(body?.params?.name ?? "", body?.params?.arguments);
-    if (err) return reject(err);
-
-    const args = body?.params?.arguments;
-    if (body?.params?.name === "generate_pitch" && args?.agentId != null) {
-      try {
-        const agent = await fetchAgent(String(args.agentId));
-        const serviceId = typeof args.serviceId === "string" ? args.serviceId : undefined;
-        const mismatch = tierMismatch(agent, tier, serviceId);
-        if (mismatch) return reject(mismatch);
-      } catch (lookupErr) {
-        // A lookup failure is ours, not the caller's — let the request through
-        // rather than refusing a job that may be perfectly payable. The pipeline
-        // retries the same lookup and reports honestly if it fails again.
-        console.warn(
-          "tier preflight could not read the agent:",
-          lookupErr instanceof Error ? lookupErr.message.split("\n")[0] : lookupErr,
-        );
-      }
+      return;
     }
     next();
   };

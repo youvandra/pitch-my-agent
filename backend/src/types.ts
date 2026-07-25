@@ -11,8 +11,8 @@ export interface AgentService {
   endpoint: string;
 }
 
-/** The three marketplace services this ASP sells, one endpoint each. */
-export type TierId = "animated" | "live-proof" | "live-proof-plus";
+/** The two marketplace services this ASP sells, one endpoint each. */
+export type TierId = "animated" | "live-proof";
 
 export interface AgentProfile {
   agentId: string;
@@ -106,32 +106,6 @@ export interface VideoSpec {
   cta: SceneCopy;
   /** Absolute/relative URL of the recorded live segment, when present. */
   liveSegmentUrl?: string;
-  /**
-   * The settled payment behind the live segment, shown as a receipt card.
-   *
-   * Claude Desktop runs a paid request as a background session and stays on its
-   * home screen, so the work itself cannot be filmed without also filming the
-   * operator's private screen. These figures come from okx-pay's receipt, which
-   * means the proof survives without the camera following anything.
-   */
-  liveProof?: {
-    amountUsd: number;
-    asset: string;
-    network: string;
-    wallet?: string;
-    serviceName?: string;
-    agentId?: string;
-  };
-  /**
-   * A concrete, ready-to-run request for the agent's first service.
-   *
-   * The marketplace's own "Use now" text only names the service, so the agent
-   * receiving it has to ask a follow-up ("which wallet?", "a comic about
-   * what?") before it can do anything. The live segment is supposed to show
-   * work being done, not an agent asking for clarification — so the pasted
-   * prompt carries the specifics with it.
-   */
-  demoRequest?: string;
   /** Backing track, synthesized per job at `bpm` so cuts land on its beat. */
   musicUrl?: string;
   /**
@@ -164,12 +138,6 @@ export type JobStage =
 
 export interface GeneratePitchInput {
   agentId: string;
-  /**
-   * Which of the agent's services to demonstrate. Drives the price (its fee is
-   * passed through), the written brief, and the service called on camera.
-   * Omitted → the cheapest one.
-   */
-  serviceId?: string;
   style?: VisualStyle;
   /** Include the recorded live segment (premium tier). */
   includeLiveSegment?: boolean;

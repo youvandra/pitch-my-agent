@@ -7,8 +7,7 @@ import { buildPalette } from "./palette.js";
 import { buildSpec, buildScript } from "./spec.js";
 import { synthesizeNarration } from "./voice.js";
 import { writeMusic } from "./music.js";
-import { captureLiveProof, type CaptureResult } from "./capture.js";
-import { findService } from "./pricing.js";
+import { captureLiveProof } from "./capture.js";
 import { renderVideo } from "./render.js";
 import { setStage, completeJob, failJob, getJob } from "./store.js";
 import type { AgentProfile, Delivery, GeneratePitchInput, NarrationLine, VisualStyle } from "./types.js";
@@ -23,7 +22,6 @@ export interface TierSpec {
 export const TIERS: Record<string, TierSpec> = {
   animated: { id: "animated", durationSec: 60, liveSegment: false },
   "live-proof": { id: "live-proof", durationSec: 100, liveSegment: true },
-  "live-proof-plus": { id: "live-proof-plus", durationSec: 100, liveSegment: true },
 };
 
 /** Rough ETA so a caller knows how long to poll for. */
@@ -68,14 +66,9 @@ function totalWithNarration(bpm: number, narration: NarrationLine[]): number {
  * fails: a live-proof job then delivers the animated cut instead of nothing.
  * The caller is told, so the tier can be honest about what it produced.
  */
-async function recordLiveSegment(
-  jobId: string,
-  agent: AgentProfile,
-  demoRequest?: string,
-  serviceId?: string,
-): Promise<{ url: string; proof?: CaptureResult["proof"] } | undefined> {
+async function recordLiveSegment(jobId: string, agent: AgentProfile): Promise<string | undefined> {
   try {
-    const result = await captureLiveProof(jobId, agent, demoRequest, serviceId);
+    const result = await captureLiveProof(jobId, agent);
     if (!result) return undefined;
     const failed = result.steps.filter((s) => !s.ok);
     if (failed.length > 0) {
@@ -84,7 +77,7 @@ async function recordLiveSegment(
           failed.map((s) => s.step).join(", "),
       );
     }
-    return { url: publicUrl(jobId, result.file), proof: result.proof };
+    return publicUrl(jobId, result.file);
   } catch (err) {
     console.error(`live capture failed for job ${jobId}:`, err);
     return undefined;
@@ -102,21 +95,12 @@ export async function runPipeline(jobId: string, input: GeneratePitchInput, tier
     const theme = await buildPalette(agent.agentId, agent.avatarUrl, style);
 
     setStage(jobId, "building_spec");
-    const spec = await buildSpec(agent, style, theme, tier.durationSec, input.serviceId);
+    const spec = await buildSpec(agent, style, theme, tier.durationSec);
 
     if (tier.liveSegment && input.includeLiveSegment !== false) {
       setStage(jobId, "recording_live");
-      const live = await recordLiveSegment(jobId, agent, spec.demoRequest, input.serviceId);
-      if (live) {
-        spec.liveSegmentUrl = live.url;
-        if (live.proof) {
-          spec.liveProof = {
-            ...live.proof,
-            serviceName: findService(agent, input.serviceId)?.name,
-            agentId: agent.agentId,
-          };
-        }
-      }
+      const liveSegmentUrl = await recordLiveSegment(jobId, agent);
+      if (liveSegmentUrl) spec.liveSegmentUrl = liveSegmentUrl;
     }
 
     if (input.voiceover !== false) {

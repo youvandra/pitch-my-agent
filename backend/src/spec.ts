@@ -4,7 +4,6 @@
 // template is fixed and consumes this as props, so a bad model response can
 // degrade the copy but can never break the render.
 import { config, hasAi } from "./config.js";
-import { findService } from "./pricing.js";
 import type {
   AgentProfile,
   Palette,
@@ -39,7 +38,6 @@ function fallbackSpec(
   style: VisualStyle,
   theme: Palette,
   durationSec: number,
-  serviceId?: string,
 ): VideoSpec {
   const firstSentence = agent.description.split(/(?<=\.)\s/)[0] ?? agent.description;
   return {
@@ -70,7 +68,6 @@ function fallbackSpec(
       headline: `Agent #${agent.agentId}`,
       sub: "Find it on OKX.ai and call it from your own agent.",
     },
-    demoRequest: fallbackDemoRequest(agent, serviceId),
     bpm: config.bpm,
     durationSec,
   };
@@ -83,26 +80,9 @@ interface AiCopy {
   problemExchange?: { user?: string; agent?: string };
   reveal?: SceneCopy;
   cta?: SceneCopy;
-  demoRequest?: string;
 }
 
-/**
- * Deterministic stand-in for the AI-written demo request.
- *
- * Without a model we cannot invent a specific brief that suits an arbitrary
- * agent, so this asks the agent to choose the specifics itself. That still
- * beats the bare "Use now" text, which leaves the agent with nothing to act on.
- */
-function fallbackDemoRequest(agent: AgentProfile, serviceId?: string): string | undefined {
-  const svc = findService(agent, serviceId);
-  if (!svc) return undefined;
-  return (
-    `For this run, use "${svc.name}" with a representative example of your own choosing ` +
-    `and go ahead without asking me for further details.`
-  );
-}
-
-async function generateCopy(agent: AgentProfile, serviceId?: string): Promise<AiCopy | null> {
+async function generateCopy(agent: AgentProfile): Promise<AiCopy | null> {
   const services = agent.services
     .map((s) => `- ${s.name} ($${s.fee}): ${s.description}`)
     .join("\n");
@@ -112,14 +92,8 @@ async function generateCopy(agent: AgentProfile, serviceId?: string): Promise<Ai
     `Agent: ${agent.name}\nDescription: ${agent.description}\nServices:\n${services}\n\n` +
     `Return ONLY minified JSON: {"tagline":"","hook":{"eyebrow":"","headline":"","sub":""},` +
     `"problem":{"eyebrow":"","headline":"","sub":""},"problemExchange":{"user":"","agent":""},` +
-    `"reveal":{"eyebrow":"","headline":"","sub":""},"cta":{"eyebrow":"","headline":"","sub":""},` +
-    `"demoRequest":""}\n` +
+    `"reveal":{"eyebrow":"","headline":"","sub":""},"cta":{"eyebrow":"","headline":"","sub":""}}\n` +
     `Rules: WRITE IN ENGLISH. Headline <= 42 chars, sub <= 120 chars, eyebrow <= 18 chars.\n` +
-    `demoRequest is a real request to send to "${findService(agent, serviceId)?.name ?? "this agent"}", written ` +
-    `as one person addressing the agent. It must already contain every input the agent needs, so ` +
-    `it can start work without asking a single follow-up question — a comic agent needs the story ` +
-    `and genre, a wallet scanner needs an address, a shopping agent needs the product. Invent ` +
-    `plausible public example values; never use real personal data. 1-2 sentences, <= 220 chars.\n` +
     `problemExchange is a two-line chat staged on screen: "user" is someone asking an AI ` +
     `assistant for the specific thing THIS agent does, and "agent" is that assistant admitting ` +
     `it cannot. Both under 48 chars, natural speech, no mention of the agent's name.\n` +
@@ -156,13 +130,12 @@ export async function buildSpec(
   style: VisualStyle,
   theme: Palette,
   durationSec: number,
-  serviceId?: string,
 ): Promise<VideoSpec> {
-  const base = fallbackSpec(agent, style, theme, durationSec, serviceId);
+  const base = fallbackSpec(agent, style, theme, durationSec);
   if (!hasAi()) return base;
 
   try {
-    const ai = await generateCopy(agent, serviceId);
+    const ai = await generateCopy(agent);
     if (!ai) return base;
     return {
       ...base,
@@ -175,7 +148,6 @@ export async function buildSpec(
         user: clamp(ai.problemExchange?.user?.trim() || base.problemExchange.user, 52),
         agent: clamp(ai.problemExchange?.agent?.trim() || base.problemExchange.agent, 52),
       },
-      demoRequest: ai.demoRequest?.trim() ? clamp(ai.demoRequest.trim(), 240) : base.demoRequest,
     };
   } catch (err) {
     console.error(`spec copy generation failed for agent ${agent.agentId}:`, err);
@@ -206,7 +178,7 @@ function fallbackScript(spec: VideoSpec, agent: AgentProfile): ScriptLine[] {
       scene: "reveal",
       text: `It exposes ${count} service${count === 1 ? "" : "s"} your agent can call directly, and pay for per call.`,
     },
-    { scene: "live", text: "Here it is, being paid and called for real." },
+    { scene: "live", text: "Here it is on the marketplace, listed and ready to call." },
     { scene: "services", text: "Every service is priced up front, so your agent can budget before it spends." },
     { scene: "cta", text: `Find agent number ${spec.agentId} on OKX dot AI.` },
   ];

@@ -11,8 +11,8 @@ import { buildPalette } from "./palette.js";
 import { buildSpec } from "./spec.js";
 import { jobStatus, TIERS, type TierSpec } from "./pipeline.js";
 import { x402Info } from "./x402.js";
-import { optionsFor, TIER_PRICING } from "./pricing.js";
-import type { TierId, VisualStyle } from "./types.js";
+import { TIER_PRICING } from "./pricing.js";
+import type { VisualStyle } from "./types.js";
 
 const AGENT_ID = z
   .string()
@@ -51,7 +51,7 @@ WHAT YOU GET BACK:
 When get_job reports status "done" it returns the delivery: videoUrl (a downloadable 1080p mp4), thumbnailUrl (poster image), durationSec, resolution, the brand palette used, and the full spec the video was built from. Hand videoUrl to your user — it is a direct link they can play or download.`;
 
 /** Free tools: discovery, preview, polling, pricing. */
-function registerFreeTools(server: McpServer, defaultTier: TierId): void {
+function registerFreeTools(server: McpServer): void {
   const READ_ONLY = { readOnlyHint: true } as const;
 
   server.registerTool(
@@ -96,10 +96,7 @@ function registerFreeTools(server: McpServer, defaultTier: TierId): void {
     {
       title: "Get pricing",
       annotations: READ_ONLY,
-      description:
-        "FREE. Base x402 pricing and what each tier includes. The live-proof tier also passes " +
-        "through the demoed agent's own service fee, so its final price depends on which service " +
-        "you pick — call get_quote with an agentId for the exact number. Never charged.",
+      description: "FREE. Current x402 pricing, tiers, and what is billed. Never charged.",
       inputSchema: {},
     },
     async () =>
@@ -114,60 +111,14 @@ function registerFreeTools(server: McpServer, defaultTier: TierId): void {
           "live-proof": {
             endpoint: TIER_PRICING["live-proof"].endpoint,
             price: `$${config.priceLiveProofUsd}`,
-            coversServicesUpTo: `$${TIER_PRICING["live-proof"].maxServiceFeeUsd.toFixed(2)}`,
             includes:
               "everything in Animated Pitch, plus a real screen recording of this agent " +
-              "being opened and used on the OKX.ai marketplace, spliced into the middle",
-          },
-          "live-proof-plus": {
-            endpoint: TIER_PRICING["live-proof-plus"].endpoint,
-            price: `$${config.priceLiveProofPlusUsd}`,
-            coversServicesUpTo: `$${TIER_PRICING["live-proof-plus"].maxServiceFeeUsd.toFixed(2)}`,
-            includes:
-              "the same video as Live-Proof. The higher price buys the call itself: this tier is " +
-              "for agents whose own service costs more to invoke",
+              "being found and opened on the OKX.ai marketplace, spliced into the middle",
           },
         },
       }),
   );
 
-  server.registerTool(
-    "get_quote",
-    {
-      title: "Price a pitch for one agent",
-      annotations: READ_ONLY,
-      description:
-        "FREE. List an agent's services and, for each, which endpoint can demo it and what that " +
-        "costs. The live tiers buy a real call to the service being filmed, so a $0.50 service and " +
-        "a $3 service are not served by the same tier — this tool tells you which endpoint to post " +
-        "to. ASK YOUR USER which service they want demonstrated when there is more than one, then " +
-        "pass its serviceId to generate_pitch. Omitting serviceId picks the cheapest. " +
-        "Always call this before paying: posting to the wrong tier is rejected without charge.",
-      inputSchema: { agentId: AGENT_ID },
-    },
-    async ({ agentId }) => {
-      const agent = await fetchAgent(agentId);
-      return json({
-        agentId: agent.agentId,
-        agentName: agent.name,
-        currency: "USDT0 on X Layer",
-        youAreCalling: TIER_PRICING[defaultTier].endpoint,
-        services: optionsFor(agent).map((o) => ({
-          serviceId: o.serviceId,
-          service: o.serviceName,
-          theirFee: `$${o.serviceFeeUsd.toFixed(2)}`,
-          ...(o.endpoint
-            ? { useEndpoint: o.endpoint, youPay: `$${o.priceUsd?.toFixed(2)}` }
-            : { unavailable: o.unsupported }),
-        })),
-        animatedAlternative: {
-          endpoint: TIER_PRICING.animated.endpoint,
-          youPay: `$${TIER_PRICING.animated.priceUsd.toFixed(2)}`,
-          note: "No recorded call, so it works for any agent regardless of its service fees.",
-        },
-      });
-    },
-  );
 }
 
 /**
@@ -190,18 +141,10 @@ export function buildPitchServer(tier: TierSpec, priceUsd: string): McpServer {
         `Generate a ${tier.durationSec}s demo video for an agent on the OKX.ai marketplace ($${priceUsd}). ` +
         `Reads the agent's profile and services, derives its brand palette from its logo, writes the script, ` +
         `and renders a 1080p mp4` +
-        (tier.liveSegment ? " with a recorded live segment of the agent actually being called." : ".") +
+        (tier.liveSegment ? " with a real recording of this agent on the OKX.ai marketplace spliced in." : ".") +
         ` Returns a jobId immediately — poll the free get_job tool for the finished video.`,
       inputSchema: {
         agentId: AGENT_ID,
-        serviceId: z
-          .string()
-          .optional()
-          .describe(
-            "Which of the agent's services to demonstrate — call get_quote first to list them " +
-              "with prices, and ASK YOUR USER which one they want when there is more than one. " +
-              "It sets the price and what the live segment shows. Omitted picks the cheapest.",
-          ),
         style: STYLE,
         voice: z
           .enum(["male", "female", "neutral"])
@@ -217,7 +160,7 @@ export function buildPitchServer(tier: TierSpec, priceUsd: string): McpServer {
               includeLiveSegment: z
                 .boolean()
                 .optional()
-                .describe("Include the recorded live-call segment (default true)."),
+                .describe("Include the recorded marketplace segment (default true)."),
             }
           : {}),
       },
@@ -230,6 +173,6 @@ export function buildPitchServer(tier: TierSpec, priceUsd: string): McpServer {
       }),
   );
 
-  registerFreeTools(server, tier.id as TierId);
+  registerFreeTools(server);
   return server;
 }

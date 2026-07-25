@@ -18,12 +18,6 @@ export const config = {
 
   priceAnimatedUsd: process.env.PRICE_ANIMATED_USD || "2.00",
   priceLiveProofUsd: process.env.PRICE_LIVE_PROOF_USD || "4.00",
-  priceLiveProofPlusUsd: process.env.PRICE_LIVE_PROOF_PLUS_USD || "6.00",
-  // Highest target-service fee each live tier pays for. A service above the top
-  // ceiling is refused before payment rather than delivered without its live
-  // segment — see pricing.ts.
-  maxServiceFeeLiveProofUsd: process.env.MAX_SERVICE_FEE_LIVE_PROOF_USD || "1.00",
-  maxServiceFeeLiveProofPlusUsd: process.env.MAX_SERVICE_FEE_LIVE_PROOF_PLUS_USD || "3.00",
 
   // AI layer. Without a key the deterministic fallback runs, so a video is
   // still produced — just with generic copy and an extraction-only palette.
@@ -70,26 +64,6 @@ export const config = {
   // Live-proof capture (macOS only). Needs Screen Recording permission for the
   // process that runs it, and Playwright installed.
   liveCaptureEnabled: process.env.LIVE_CAPTURE_ENABLED === "true",
-  // avfoundation device index for the display; `ffmpeg -f avfoundation
-  // -list_devices true -i ""` prints it. 4 on this machine.
-  captureScreenIndex: process.env.CAPTURE_SCREEN_INDEX || "2",
-  ffmpegBin: process.env.FFMPEG_BIN || "ffmpeg",
-  ffprobeBin: process.env.FFPROBE_BIN || "ffprobe",
-  // Where the okx-pay MCP wrapper records each settled call. The live segment
-  // reads the delivery from there instead of OCR-ing it off the recording.
-  okxPayReceiptDir: process.env.OKX_PAY_RECEIPT_DIR || `${process.env.HOME}/.okx-pay`,
-  // How long the recording waits for the agent to settle a paid call before
-  // giving up and cutting what it has.
-  liveCallTimeoutMs: Number(process.env.LIVE_CALL_TIMEOUT_MS || 180_000),
-  // How long to wait for the paid agent to actually produce its artifact after
-  // settlement. Payment is instant; the work is not.
-  deliveryTimeoutMs: Number(process.env.DELIVERY_TIMEOUT_MS || 240_000),
-  claudeAppName: process.env.CLAUDE_APP_NAME || "Claude",
-  // cliclick sends keystrokes via CGEvent — Accessibility only, no Apple Events
-  // (Automation entitlement is unobtainable for this background process).
-  cliclickBin: process.env.CLICLICK_BIN || "/opt/homebrew/bin/cliclick",
-  // python3 with pyobjc-framework-Quartz, for read-only window bounds.
-  pythonBin: process.env.PYTHON_BIN || "python3",
 };
 
 export const hasAi = (): boolean => !!config.sumopodApiKey;
