@@ -74,6 +74,13 @@ export const config = {
   // -list_devices true -i ""` prints it. 4 on this machine.
   captureScreenIndex: process.env.CAPTURE_SCREEN_INDEX || "2",
   ffmpegBin: process.env.FFMPEG_BIN || "ffmpeg",
+  ffprobeBin: process.env.FFPROBE_BIN || "ffprobe",
+  // Where the okx-pay MCP wrapper records each settled call. The live segment
+  // reads the delivery from there instead of OCR-ing it off the recording.
+  okxPayReceiptDir: process.env.OKX_PAY_RECEIPT_DIR || `${process.env.HOME}/.okx-pay`,
+  // How long the recording waits for the agent to settle a paid call before
+  // giving up and cutting what it has.
+  liveCallTimeoutMs: Number(process.env.LIVE_CALL_TIMEOUT_MS || 180_000),
   claudeAppName: process.env.CLAUDE_APP_NAME || "Claude",
   // cliclick sends keystrokes via CGEvent — Accessibility only, no Apple Events
   // (Automation entitlement is unobtainable for this background process).

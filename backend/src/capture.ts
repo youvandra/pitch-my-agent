@@ -66,6 +66,13 @@ function buildPrompt(agent: AgentProfile, demoRequest?: string, serviceId?: stri
   }
   lines.push("Please use OKX Agent Payments Protocol to send a request to this endpoint");
   if (demoRequest) lines.push("", demoRequest);
+  // Claude Desktop can read a 402 challenge but cannot sign one; the okx-pay
+  // MCP server is what settles it. Naming the tool keeps the recorded run from
+  // stalling on "I am unable to make payments".
+  lines.push(
+    "",
+    "Settle the payment with the okx-pay tool pay_and_call, then show me what came back.",
+  );
   return lines.join("\n");
 }
 
@@ -112,6 +119,66 @@ async function pressCmd(letter: string): Promise<void> {
 /** Press Escape — dismisses any open modal (Settings, dialogs) harmlessly. */
 async function pressEsc(): Promise<void> {
   await execFileP(config.cliclickBin, ["kp:esc"], { timeout: 8000 });
+}
+
+/** Send the prompt. */
+async function pressReturn(): Promise<void> {
+  await execFileP(config.cliclickBin, ["kp:return"], { timeout: 8000 });
+}
+
+// ─── Reading the result without reading the screen ───────────────────────────
+
+/**
+ * The receipt okx-pay writes for every call it settles.
+ *
+ * The delivery is on screen, but a recording is pixels — pulling a URL back out
+ * of it would mean OCR. We do not have to: okx-pay is our own MCP server, so
+ * when Claude pays through it, the result passes through our code first and is
+ * written to disk. This reads that, which is exact where OCR would be a guess.
+ */
+interface CallReceipt {
+  at: string;
+  paid: boolean;
+  amountUsd?: number;
+  wallet?: string;
+  endpoint?: string;
+  result?: unknown;
+}
+
+function readReceipt(): CallReceipt | null {
+  try {
+    const raw = fs.readFileSync(path.join(config.okxPayReceiptDir, "last-call.json"), "utf-8");
+    return JSON.parse(raw) as CallReceipt;
+  } catch {
+    return null;
+  }
+}
+
+/** Wait for a receipt written after `since`. Returns null if none arrives. */
+async function waitForReceipt(since: number, timeoutMs: number): Promise<CallReceipt | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const receipt = readReceipt();
+    if (receipt && Date.parse(receipt.at) > since) return receipt;
+    await wait(2000);
+  }
+  return null;
+}
+
+/**
+ * First http(s) URL anywhere in the delivery.
+ *
+ * Agents on this marketplace answer with a link far more often than with the
+ * artifact itself — a reader page, a report, a PDF. Whatever the shape of the
+ * response, the link is the thing worth filming, so it is worth digging for
+ * rather than requiring a known field name.
+ */
+function deliveryUrl(receipt: CallReceipt): string | null {
+  const seen = JSON.stringify(receipt.result ?? {});
+  const match = seen.match(/https?:\/\/[^"\\\s]+/);
+  if (!match) return null;
+  const url = match[0].replace(/[.,)]+$/, "");
+  return /^https?:\/\/[^/]+/.test(url) ? url : null;
 }
 
 // ─── Window geometry (Quartz, read-only, no permission) ──────────────────────
@@ -218,33 +285,163 @@ function startScreenRecording(outPath: string, screenIndex: string): Recorder {
   };
 }
 
+/** Seconds of the Claude clip kept at real speed at the head and the tail. */
+const RAMP_HEAD_SEC = 6;
+const RAMP_TAIL_SEC = 4;
+/** Longest the compressed middle may last. */
+const RAMP_MIDDLE_SEC = 4;
+
+async function durationSec(file: string): Promise<number> {
+  try {
+    const { stdout } = await execFileP(
+      config.ffprobeBin,
+      ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file],
+      { timeout: 20000 },
+    );
+    const n = Number(stdout.trim());
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+const FIT = `scale=${CAPTURE_WIDTH}:${CAPTURE_HEIGHT}:force_original_aspect_ratio=decrease,pad=${CAPTURE_WIDTH}:${CAPTURE_HEIGHT}:(ow-iw)/2:(oh-ih)/2,setsar=1`;
+
+interface Clip {
+  path: string;
+  /** Window rect to crop to, for screen grabs. */
+  crop?: { w: number; h: number; x: number; y: number } | null;
+  /** Compress the middle of this clip — for the wait while the agent works. */
+  ramp?: boolean;
+}
+
 /**
- * Concatenate the browser clip and the Claude clip into one live segment.
+ * Normalise one clip to the mockup's 16:10, optionally timelapsing its middle.
  *
- * Both are normalised to the mockup's 16:10: the Claude grab is cropped to the
- * window rect (so the desktop around it never shows), then each is scaled to fit
- * and padded, so neither is distorted and the two play back-to-back at one size.
+ * The wait between sending a request and the agent answering is dead screen
+ * time — real, but nobody needs to watch it at 1x. The head (the request going
+ * out) and the tail (the answer arriving) stay at real speed because those are
+ * the parts that carry the proof; only the middle is compressed.
  */
-async function concat(
-  browser: string,
-  claude: string,
-  crop: { w: number; h: number; x: number; y: number } | null,
-  outPath: string,
-): Promise<boolean> {
-  const fit = `scale=${CAPTURE_WIDTH}:${CAPTURE_HEIGHT}:force_original_aspect_ratio=decrease,pad=${CAPTURE_WIDTH}:${CAPTURE_HEIGHT}:(ow-iw)/2:(oh-ih)/2,setsar=1`;
-  const claudeChain = crop ? `crop=${crop.w}:${crop.h}:${crop.x}:${crop.y},${fit}` : fit;
-  const filter = `[0:v]${fit}[a];[1:v]${claudeChain}[b];[a][b]concat=n=2:v=1[out]`;
+async function normalizeClip(clip: Clip, outPath: string): Promise<boolean> {
+  const chain = clip.crop
+    ? `crop=${clip.crop.w}:${clip.crop.h}:${clip.crop.x}:${clip.crop.y},${FIT}`
+    : FIT;
+
+  let filter = `[0:v]${chain}[out]`;
+  if (clip.ramp) {
+    const total = await durationSec(clip.path);
+    const spare = total - RAMP_HEAD_SEC - RAMP_TAIL_SEC;
+    if (spare > RAMP_MIDDLE_SEC) {
+      const midStart = RAMP_HEAD_SEC;
+      const midEnd = total - RAMP_TAIL_SEC;
+      const factor = spare / RAMP_MIDDLE_SEC;
+      filter =
+        `[0:v]${chain},split=3[c0][c1][c2];` +
+        `[c0]trim=0:${midStart.toFixed(3)},setpts=PTS-STARTPTS[h];` +
+        `[c1]trim=${midStart.toFixed(3)}:${midEnd.toFixed(3)},setpts=(PTS-STARTPTS)/${factor.toFixed(4)}[m];` +
+        `[c2]trim=${midEnd.toFixed(3)}:${total.toFixed(3)},setpts=PTS-STARTPTS[t];` +
+        `[h][m][t]concat=n=3:v=1[out]`;
+    }
+  }
+
   try {
     await execFileP(
       config.ffmpegBin,
-      ["-y", "-i", browser, "-i", claude, "-filter_complex", filter, "-map", "[out]", "-r", "30", "-pix_fmt", "yuv420p", outPath],
+      ["-y", "-i", clip.path, "-filter_complex", filter, "-map", "[out]", "-r", "30", "-pix_fmt", "yuv420p", outPath],
+      { timeout: 180000, maxBuffer: 16 * 1024 * 1024 },
+    );
+    return fs.existsSync(outPath) && fs.statSync(outPath).size > 10_000;
+  } catch (err) {
+    console.error("could not normalise a live clip:", err instanceof Error ? err.message.split("\n")[0] : err);
+    return false;
+  }
+}
+
+/**
+ * Stitch the beats into one live segment.
+ *
+ * Each clip is normalised to a common size first and then concatenated by the
+ * demuxer, rather than assembled in one filter graph: a single clip failing to
+ * normalise then costs us that beat instead of the whole segment.
+ */
+async function stitch(clips: Clip[], outDir: string, outPath: string): Promise<boolean> {
+  const parts: string[] = [];
+  for (const [i, clip] of clips.entries()) {
+    if (!fs.existsSync(clip.path)) continue;
+    const part = path.join(outDir, `part-${i}.mp4`);
+    if (await normalizeClip(clip, part)) parts.push(part);
+  }
+  if (parts.length === 0) return false;
+
+  const listPath = path.join(outDir, "parts.txt");
+  fs.writeFileSync(listPath, parts.map((p) => `file '${p}'`).join("\n"), "utf-8");
+  try {
+    await execFileP(
+      config.ffmpegBin,
+      ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", outPath],
       { timeout: 120000, maxBuffer: 16 * 1024 * 1024 },
     );
     return fs.existsSync(outPath) && fs.statSync(outPath).size > 10_000;
   } catch (err) {
     console.error("could not concatenate the live segments:", err instanceof Error ? err.message.split("\n")[0] : err);
     return false;
+  } finally {
+    for (const p of [...parts, listPath]) fs.rmSync(p, { force: true });
   }
+}
+
+/**
+ * Film one page in its own Playwright recording.
+ *
+ * Playwright records the page content rather than the screen, so nothing but
+ * the viewport can ever be in frame — the same reason part 1 uses it.
+ */
+async function recordPage(
+  url: string,
+  outDir: string,
+  outPath: string,
+  steps: CaptureResult["steps"],
+): Promise<boolean> {
+  let chromium: typeof import("playwright").chromium;
+  try {
+    ({ chromium } = await import("playwright"));
+  } catch {
+    return false;
+  }
+
+  const browser = await chromium.launch({ headless: false });
+  const context = await browser.newContext({
+    viewport: { width: CAPTURE_WIDTH, height: CAPTURE_HEIGHT },
+    recordVideo: { dir: outDir, size: { width: CAPTURE_WIDTH, height: CAPTURE_HEIGHT } },
+  });
+  const page = await context.newPage();
+  const video = page.video();
+  let ok = false;
+  try {
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+    await wait(2500);
+    // A slow scroll shows more of the artifact than a static frame, and reads
+    // as someone looking at it rather than a screenshot.
+    await page.mouse.wheel(0, 600);
+    await wait(2500);
+    ok = true;
+    steps.push({ step: "open the delivery", ok: true, note: url });
+  } catch (err) {
+    const note = err instanceof Error ? err.message.split("\n")[0] : String(err);
+    steps.push({ step: "open the delivery", ok: false, note });
+  } finally {
+    await context.close().catch(() => {});
+    await browser.close().catch(() => {});
+  }
+
+  try {
+    const tmp = await video?.path();
+    if (tmp && fs.existsSync(tmp)) fs.renameSync(tmp, outPath);
+  } catch {
+    /* checked below */
+  }
+  return ok && fs.existsSync(outPath) && fs.statSync(outPath).size > 10_000;
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -275,6 +472,7 @@ export async function captureLiveProof(
   const prompt = buildPrompt(agent, demoRequest, serviceId);
   const browserPath = path.join(outDir, "browser.webm");
   const claudePath = path.join(outDir, "claude.mp4");
+  const resultPath = path.join(outDir, "result.webm");
   const outPath = path.join(outDir, "live.mp4");
 
   // ── Part 1: browser (Playwright records the page) ──
@@ -367,7 +565,9 @@ export async function captureLiveProof(
 
   // ── Part 2: Claude Desktop (screen grab, cropped to its window) ──
   let claudeRecorded = false;
+  let receipt: CallReceipt | null = null;
   let crop: { w: number; h: number; x: number; y: number } | null = null;
+  const sentAt = Date.now();
   try {
     // Preflight: no working keyboard, no segment. Checked before ffmpeg starts
     // so a privilege gap can never turn into unscripted desktop footage.
@@ -397,10 +597,9 @@ export async function captureLiveProof(
     await wait(800); // ffmpeg warm-up before the action
 
     try {
-      // Paste only. Deliberately NOT sent: the paid call cannot complete yet
-      // (no okx-pay wrapper), so the shot ends on the prompt sitting in Claude.
       await pressCmd("v");
-      await wait(2600); // hold on the pasted prompt
+      await wait(1800); // let the pasted prompt be readable before it is sent
+      await pressReturn();
     } catch (err) {
       // The recording is already rolling and the scripted actions did not
       // happen, so whatever is on tape is unvetted. Stop and destroy it.
@@ -409,8 +608,20 @@ export async function captureLiveProof(
       throw err;
     }
 
+    // Film until the money has actually moved. okx-pay writes a receipt the
+    // moment it settles a call, so the recording ends on the delivery rather
+    // than on an arbitrary timer.
+    receipt = await waitForReceipt(sentAt, config.liveCallTimeoutMs);
+    await wait(receipt ? 3500 : 1500); // hold on the answer
     await rec.stop();
-    steps.push({ step: "paste into Claude", ok: fs.existsSync(claudePath) });
+    steps.push({ step: "send the prompt", ok: fs.existsSync(claudePath) });
+    steps.push({
+      step: "agent settled a paid call",
+      ok: !!receipt?.paid,
+      note: receipt
+        ? `$${receipt.amountUsd?.toFixed(2) ?? "?"} to ${receipt.endpoint ?? "the agent"}`
+        : "no receipt arrived before the timeout",
+    });
 
     // Scale the logical window bounds to physical capture pixels for the crop.
     const dims = rec.dims();
@@ -435,12 +646,35 @@ export async function captureLiveProof(
     console.error("Claude capture failed, delivering the browser segment only:", err);
   }
 
-  // ── Stitch, or fall back to the browser clip alone ──
-  let file: string;
-  if (claudeRecorded && (await concat(browserPath, claudePath, crop, outPath))) {
-    file = "live.mp4";
-  } else {
-    file = "browser.webm";
+  // ── Part 3: the delivered artifact, opened in the browser ──
+  //
+  // Almost every agent here answers with a link — a reader page, a report, a
+  // PDF — so the run is only shown to have worked once that link is on screen.
+  // Filmed by Playwright like part 1, which keeps it leak-free.
+  let resultRecorded = false;
+  const url = receipt ? deliveryUrl(receipt) : null;
+  if (url) {
+    resultRecorded = await recordPage(url, outDir, resultPath, steps);
+  } else if (receipt) {
+    steps.push({ step: "open the delivery", ok: false, note: "the response carried no link to open" });
+  }
+
+  // ── Stitch what we got. Any beat may be missing; the rest still cut. ──
+  const clips: Clip[] = [{ path: browserPath }];
+  if (claudeRecorded) clips.push({ path: claudePath, crop, ramp: true });
+  if (resultRecorded) clips.push({ path: resultPath });
+
+  const file = clips.length > 1 && (await stitch(clips, outDir, outPath)) ? "live.mp4" : "browser.webm";
+
+  // Playwright names its raw recordings page@<hash>.webm and leaves them behind
+  // once the real clips have been renamed out. They are byte-for-byte dead
+  // weight in a directory that is served over HTTP.
+  try {
+    for (const name of fs.readdirSync(outDir)) {
+      if (/^page@[0-9a-f]+\.webm$/i.test(name)) fs.rmSync(path.join(outDir, name), { force: true });
+    }
+  } catch {
+    /* leftovers are untidy, not fatal */
   }
 
   return { file, steps };
