@@ -68,6 +68,16 @@ export async function runPipeline(jobId: string, input: GeneratePitchInput, tier
     setStage(jobId, "building_spec");
     const spec = await buildSpec(agent, style, theme, tier.durationSec);
 
+    // The model may pick a style that fits the agent's character better than
+    // the default. The palette's backdrop comes from the style, so honouring
+    // that choice means rebuilding the theme — but never over an explicit
+    // caller choice: the buyer outranks the model.
+    const planned = spec.scenePlan?.style;
+    if (!input.style && planned && planned !== style) {
+      spec.style = planned;
+      spec.theme = await buildPalette(agent.agentId, agent.avatarUrl, planned);
+    }
+
     if (input.voiceover !== false) {
       setStage(jobId, "recording_voice");
       const script = await buildScript(spec, agent);

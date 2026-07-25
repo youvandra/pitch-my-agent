@@ -5,6 +5,7 @@ import { makeGrid, staggerBeats } from "./beat";
 import {
   A,
   TYPE,
+  FONT_DISPLAY,
   FONT_MONO,
   AgentCard,
   Avatar,
@@ -33,8 +34,11 @@ interface SceneProps {
   spec: VideoSpec;
 }
 
-/** 1 · HOOK — centred portrait. Who this is, nothing else. */
-export const SceneHook: React.FC<SceneProps> = ({ spec }) => (
+/**
+ * 1 · HOOK — who this is. Three compositions, chosen per agent:
+ * a logo-led portrait, a tagline-led statement, or a side-by-side badge.
+ */
+const HookPortrait: React.FC<SceneProps> = ({ spec }) => (
   <Stage theme={spec.theme} styleKind={spec.style} align="center">
     <Pop delay={1}>
       <Avatar theme={spec.theme} url={spec.avatarUrl} name={spec.agentName} size={196} />
@@ -52,13 +56,64 @@ export const SceneHook: React.FC<SceneProps> = ({ spec }) => (
   </Stage>
 );
 
+const HookStatement: React.FC<SceneProps> = ({ spec }) => (
+  <Stage theme={spec.theme} styleKind={spec.style} align="center">
+    <Eyebrow theme={spec.theme} delay={4}>
+      {spec.hook.eyebrow ?? "On OKX.ai"}
+    </Eyebrow>
+    <MaskLine delay={10}>
+      <H1 theme={spec.theme} size={TYPE.h1}>
+        {spec.tagline}
+      </H1>
+    </MaskLine>
+    <BlurIn delay={34}>
+      <div style={{ display: "flex", alignItems: "center", gap: 18, marginTop: 44 }}>
+        <Avatar theme={spec.theme} url={spec.avatarUrl} name={spec.agentName} size={64} />
+        <span style={{ fontFamily: FONT_MONO, fontSize: 27, color: spec.theme.muted }}>{spec.agentName}</span>
+      </div>
+    </BlurIn>
+  </Stage>
+);
+
+const HookBadge: React.FC<SceneProps> = ({ spec }) => (
+  <Stage theme={spec.theme} styleKind={spec.style} align="left">
+    <div style={{ display: "flex", alignItems: "center", gap: 52 }}>
+      <Pop delay={2}>
+        <Avatar theme={spec.theme} url={spec.avatarUrl} name={spec.agentName} size={230} />
+      </Pop>
+      <div>
+        <Eyebrow theme={spec.theme} delay={12}>
+          {spec.hook.eyebrow ?? "On OKX.ai"}
+        </Eyebrow>
+        <MaskLine delay={18}>
+          <H1 theme={spec.theme} size={TYPE.display}>
+            {spec.agentName}
+          </H1>
+        </MaskLine>
+        <BlurIn delay={34}>
+          <div style={{ fontSize: TYPE.sub, color: spec.theme.muted, marginTop: 20, maxWidth: 900 }}>
+            {spec.tagline}
+          </div>
+        </BlurIn>
+      </div>
+    </div>
+  </Stage>
+);
+
+export const SceneHook: React.FC<SceneProps> = ({ spec }) => {
+  const variant = spec.scenePlan?.hook ?? "portrait";
+  if (variant === "statement") return <HookStatement spec={spec} />;
+  if (variant === "badge") return <HookBadge spec={spec} />;
+  return <HookPortrait spec={spec} />;
+};
+
 /**
  * 2 · PROBLEM — staged conversation, left aligned.
  *
  * Showing the wall an agent runs into lands harder than describing it, so this
  * beat is played out as messages rather than a paragraph.
  */
-export const SceneProblem: React.FC<SceneProps> = ({ spec }) => {
+const ProblemChat: React.FC<SceneProps> = ({ spec }) => {
   const frame = useCurrentFrame();
   return (
     <Stage theme={spec.theme} styleKind={spec.style} align="left">
@@ -115,8 +170,31 @@ export const SceneProblem: React.FC<SceneProps> = ({ spec }) => {
   );
 };
 
-/** 3 · REVEAL — the product shot. The marketplace card, centred, popped in. */
-export const SceneReveal: React.FC<SceneProps> = ({ spec }) => (
+/** The other problem composition: one blunt question, centred, no theatre. */
+const ProblemWall: React.FC<SceneProps> = ({ spec }) => (
+  <Stage theme={spec.theme} styleKind={spec.style} align="center">
+    <Eyebrow theme={spec.theme} delay={2}>
+      {spec.problem.eyebrow ?? "The problem"}
+    </Eyebrow>
+    <MaskLine delay={8}>
+      <H1 theme={spec.theme} size={TYPE.display}>
+        {spec.problem.headline}
+      </H1>
+    </MaskLine>
+    <Swipe theme={spec.theme} delay={26} width={380} />
+    <BlurIn delay={34}>
+      <div style={{ fontSize: TYPE.sub, color: spec.theme.muted, marginTop: 30, maxWidth: 1100 }}>
+        {spec.problem.sub}
+      </div>
+    </BlurIn>
+  </Stage>
+);
+
+export const SceneProblem: React.FC<SceneProps> = ({ spec }) =>
+  (spec.scenePlan?.problem ?? "chat") === "wall" ? <ProblemWall spec={spec} /> : <ProblemChat spec={spec} />;
+
+/** 3 · REVEAL — the product shot: marketplace card, or a name-led banner. */
+const RevealCard: React.FC<SceneProps> = ({ spec }) => (
   <Stage theme={spec.theme} styleKind={spec.style} align="center">
     <Eyebrow theme={spec.theme} delay={2}>
       {spec.reveal.eyebrow ?? "Meet"}
@@ -137,6 +215,46 @@ export const SceneReveal: React.FC<SceneProps> = ({ spec }) => (
   </Stage>
 );
 
+const RevealBanner: React.FC<SceneProps> = ({ spec }) => (
+  <Stage theme={spec.theme} styleKind={spec.style} align="left">
+    <Eyebrow theme={spec.theme} delay={2}>
+      {spec.reveal.eyebrow ?? "Meet"}
+    </Eyebrow>
+    <MaskLine delay={8}>
+      <H1 theme={spec.theme} size={TYPE.display}>
+        {spec.reveal.headline}
+      </H1>
+    </MaskLine>
+    <BlurIn delay={26}>
+      <div style={{ fontSize: TYPE.sub, color: spec.theme.muted, marginTop: 24, maxWidth: 1150 }}>
+        {spec.reveal.sub}
+      </div>
+    </BlurIn>
+    <BlurIn delay={38}>
+      <div style={{ display: "flex", gap: 16, marginTop: 40 }}>
+        {[`#${spec.agentId}`, `${spec.services.length} services`, "pay-per-call · x402"].map((chip) => (
+          <div
+            key={chip}
+            style={{
+              fontFamily: FONT_MONO,
+              fontSize: 23,
+              color: spec.theme.accent,
+              border: `1px solid ${spec.theme.accent}44`,
+              borderRadius: 999,
+              padding: "10px 22px",
+              background: `${spec.theme.accent}0d`,
+            }}
+          >
+            {chip}
+          </div>
+        ))}
+      </div>
+    </BlurIn>
+  </Stage>
+);
+
+export const SceneReveal: React.FC<SceneProps> = ({ spec }) =>
+  (spec.scenePlan?.reveal ?? "card") === "banner" ? <RevealBanner spec={spec} /> : <RevealCard spec={spec} />;
 
 /**
  * 4 · DEMO — one purchase, staged end to end.
@@ -349,32 +467,149 @@ export const SceneDemo: React.FC<SceneProps> = ({ spec }) => {
   );
 };
 
-/** 5 · SERVICES — the price list, built one row at a time, on the beat. */
-export const SceneServices: React.FC<SceneProps> = ({ spec }) => {
-  // Rows arrive on consecutive beats of the actual backing track. The cuts are
-  // already quantized to bars; entrances that land between beats are what makes
-  // motion feel pasted onto the music instead of driven by it.
+/** 5 · SERVICES — the catalogue: rows, a card grid, or one hero offer. */
+const ServicesList: React.FC<SceneProps> = ({ spec }) => {
   const delays = staggerBeats(makeGrid(spec.bpm), spec.services.length, 1, 1);
   return (
-  <Stage theme={spec.theme} styleKind={spec.style} align="left">
-    <Eyebrow theme={spec.theme} delay={2}>
-      What it sells
-    </Eyebrow>
-    <div style={{ display: "flex", flexDirection: "column", gap: 18, width: 1400, marginTop: 6 }}>
-      {spec.services.map((s, i) => (
-        <BlurIn key={`${s.name}-${i}`} delay={delays[i]} y={22}>
-          <ServiceRow
-            theme={spec.theme}
-            name={s.name}
-            description={s.description}
-            price={s.price}
-            index={i}
-          />
-        </BlurIn>
-      ))}
-    </div>
-  </Stage>
+    <Stage theme={spec.theme} styleKind={spec.style} align="left">
+      <Eyebrow theme={spec.theme} delay={2}>
+        What it sells
+      </Eyebrow>
+      <div style={{ display: "flex", flexDirection: "column", gap: 18, width: 1400, marginTop: 6 }}>
+        {spec.services.map((s, i) => (
+          <BlurIn key={`${s.name}-${i}`} delay={delays[i]} y={22}>
+            <ServiceRow theme={spec.theme} name={s.name} description={s.description} price={s.price} index={i} />
+          </BlurIn>
+        ))}
+      </div>
+    </Stage>
   );
+};
+
+const ServicesGrid: React.FC<SceneProps> = ({ spec }) => {
+  const items = spec.services.slice(0, 4);
+  const delays = staggerBeats(makeGrid(spec.bpm), items.length, 1, 1);
+  return (
+    <Stage theme={spec.theme} styleKind={spec.style} align="left">
+      <Eyebrow theme={spec.theme} delay={2}>
+        What it sells
+      </Eyebrow>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, width: 1400, marginTop: 6 }}>
+        {items.map((s, i) => (
+          <BlurIn key={`${s.name}-${i}`} delay={delays[i]} y={20}>
+            <div
+              style={{
+                background: spec.theme.bg2,
+                border: `1px solid ${spec.theme.primary}2e`,
+                borderRadius: 20,
+                padding: "28px 32px",
+                textAlign: "left",
+                height: 172,
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+              }}
+            >
+              <div>
+                <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 33, color: spec.theme.text }}>
+                  {s.name}
+                </div>
+                <div
+                  style={{
+                    fontSize: 23,
+                    color: spec.theme.muted,
+                    marginTop: 8,
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                  }}
+                >
+                  {s.description}
+                </div>
+              </div>
+              <div style={{ fontFamily: FONT_MONO, fontSize: 32, fontWeight: 700, color: spec.theme.accent }}>
+                {s.price}
+              </div>
+            </div>
+          </BlurIn>
+        ))}
+      </div>
+    </Stage>
+  );
+};
+
+const ServicesHero: React.FC<SceneProps> = ({ spec }) => {
+  const price = (p: string): number => {
+    const n = Number(p.replace(/[^0-9.]/g, ""));
+    return Number.isFinite(n) && n > 0 ? n : Infinity;
+  };
+  const sorted = [...spec.services].sort((a, b) => price(a.price) - price(b.price));
+  const [hero, ...rest] = sorted;
+  const delays = staggerBeats(makeGrid(spec.bpm), rest.length + 1, 1, 1);
+  if (!hero) return null;
+  return (
+    <Stage theme={spec.theme} styleKind={spec.style} align="left">
+      <Eyebrow theme={spec.theme} delay={2}>
+        Start here
+      </Eyebrow>
+      <BlurIn delay={delays[0]} y={24}>
+        <div
+          style={{
+            width: 1400,
+            background: spec.theme.bg2,
+            border: `1.5px solid ${spec.theme.accent}55`,
+            borderRadius: 24,
+            padding: "40px 44px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 40,
+            textAlign: "left",
+            boxShadow: `0 40px 100px -45px #000, 0 0 60px -35px ${spec.theme.accent}55`,
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 46, color: spec.theme.text }}>
+              {hero.name}
+            </div>
+            <div style={{ fontSize: 26, color: spec.theme.muted, marginTop: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {hero.description}
+            </div>
+          </div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 56, fontWeight: 700, color: spec.theme.accent, whiteSpace: "nowrap" }}>
+            {hero.price}
+          </div>
+        </div>
+      </BlurIn>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, width: 1400, marginTop: 20 }}>
+        {rest.slice(0, 3).map((s, i) => (
+          <BlurIn key={`${s.name}-${i}`} delay={delays[i + 1]} y={14}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                padding: "18px 30px",
+                borderRadius: 14,
+                border: `1px solid ${spec.theme.muted}1f`,
+                textAlign: "left",
+              }}
+            >
+              <span style={{ fontSize: 27, color: spec.theme.text }}>{s.name}</span>
+              <span style={{ fontFamily: FONT_MONO, fontSize: 27, color: spec.theme.muted }}>{s.price}</span>
+            </div>
+          </BlurIn>
+        ))}
+      </div>
+    </Stage>
+  );
+};
+
+export const SceneServices: React.FC<SceneProps> = ({ spec }) => {
+  const variant = spec.scenePlan?.services ?? "list";
+  if (variant === "grid") return <ServicesGrid spec={spec} />;
+  if (variant === "hero" && spec.services.length > 0) return <ServicesHero spec={spec} />;
+  return <ServicesList spec={spec} />;
 };
 
 /** 6 · CTA — one line, centred, with the id an agent actually needs. */

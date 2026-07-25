@@ -12,6 +12,7 @@ import type {
   ResultKind,
   SceneCopy,
   SceneKey,
+  ScenePlan,
   ServiceCard,
   VideoSpec,
   VisualStyle,
@@ -101,6 +102,48 @@ function fallbackDemoFlow(agent: AgentProfile): DemoFlow | undefined {
   };
 }
 
+const PLAN_OPTIONS = {
+  style: ["terminal", "playful", "saas"],
+  hook: ["portrait", "statement", "badge"],
+  problem: ["chat", "wall"],
+  reveal: ["card", "banner"],
+  services: ["list", "grid", "hero"],
+} as const;
+
+/**
+ * Deterministic per-agent architecture.
+ *
+ * A different prime multiplier per slot keeps the choices from moving in
+ * lockstep — without that, agents 6006 and 6007 would differ in every slot by
+ * the same rotation and the catalogue would still have a visible pattern.
+ */
+function fallbackPlan(agent: AgentProfile): ScenePlan {
+  let h = 0;
+  for (const ch of agent.agentId + agent.name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return {
+    hook: PLAN_OPTIONS.hook[(h * 7) % 3],
+    problem: PLAN_OPTIONS.problem[(h * 11) % 2],
+    reveal: PLAN_OPTIONS.reveal[(h * 13) % 2],
+    services: PLAN_OPTIONS.services[(h * 17) % 3],
+  };
+}
+
+/** Keep only recognised values from the model's plan; anything else falls back. */
+function mergePlan(base: ScenePlan, ai: Record<string, unknown> | undefined): ScenePlan {
+  if (!ai) return base;
+  const pick = <K extends keyof typeof PLAN_OPTIONS>(key: K): string | undefined => {
+    const v = ai[key];
+    return typeof v === "string" && (PLAN_OPTIONS[key] as readonly string[]).includes(v) ? v : undefined;
+  };
+  return {
+    style: (pick("style") as VisualStyle | undefined) ?? base.style,
+    hook: (pick("hook") as ScenePlan["hook"]) ?? base.hook,
+    problem: (pick("problem") as ScenePlan["problem"]) ?? base.problem,
+    reveal: (pick("reveal") as ScenePlan["reveal"]) ?? base.reveal,
+    services: (pick("services") as ScenePlan["services"]) ?? base.services,
+  };
+}
+
 /** Deterministic spec. Always valid, used verbatim when no AI key is set. */
 function fallbackSpec(
   agent: AgentProfile,
@@ -138,6 +181,7 @@ function fallbackSpec(
       sub: "Find it on OKX.ai and call it from your own agent.",
     },
     demoFlow: fallbackDemoFlow(agent),
+    scenePlan: fallbackPlan(agent),
     bpm: config.bpm,
     durationSec,
   };
@@ -151,6 +195,7 @@ interface AiCopy {
   reveal?: SceneCopy;
   cta?: SceneCopy;
   demoFlow?: { request?: string; resultKind?: string; resultLines?: string[]; resultCaption?: string };
+  plan?: Record<string, unknown>;
 }
 
 const RESULT_KINDS = new Set<ResultKind>(["image-grid", "report", "chart", "text"]);
@@ -190,7 +235,8 @@ async function generateCopy(agent: AgentProfile): Promise<AiCopy | null> {
     `Return ONLY minified JSON: {"tagline":"","hook":{"eyebrow":"","headline":"","sub":""},` +
     `"problem":{"eyebrow":"","headline":"","sub":""},"problemExchange":{"user":"","agent":""},` +
     `"reveal":{"eyebrow":"","headline":"","sub":""},"cta":{"eyebrow":"","headline":"","sub":""},` +
-    `"demoFlow":{"request":"","resultKind":"","resultLines":[""],"resultCaption":""}}\n` +
+    `"demoFlow":{"request":"","resultKind":"","resultLines":[""],"resultCaption":""},` +
+    `"plan":{"style":"","hook":"","problem":"","reveal":"","services":""}}\n` +
     `Rules: WRITE IN ENGLISH. Headline <= 42 chars, sub <= 120 chars, eyebrow <= 18 chars.\n` +
     `demoFlow stages one purchase of "${demoService(agent)?.name ?? "the service"}" on screen. ` +
     `"request" is the exact message a buyer would send — concrete, carrying every needed input, ` +
@@ -198,6 +244,13 @@ async function generateCopy(agent: AgentProfile): Promise<AiCopy | null> {
     `"chart" (market/price data), "report" (analysis/verdict), or "text". "resultLines" are 2-4 ` +
     `fragments naming what came back (panel titles, findings, series), each <= 40 chars. ` +
     `"resultCaption" names the artifact in one line, <= 60 chars.\n` +
+    `plan chooses the video's architecture — pick what fits this agent's character, not a default. ` +
+    `style: "playful" for creative/fun agents, "terminal" for technical/trading ones, "saas" for ` +
+    `polished b2b tools. hook: "portrait" (logo-led), "statement" (tagline-led — use when the ` +
+    `tagline is the strongest asset), "badge" (logo + tagline side by side). problem: "chat" (a ` +
+    `staged refusal — use when the failure is conversational) or "wall" (one blunt question — use ` +
+    `when it is not). reveal: "card" (product card) or "banner" (name-led). services: "list" ` +
+    `(4 rows), "grid" (2x2 cards), "hero" (cheapest service leads, rest follow small).\n` +
     `problemExchange is a two-line chat staged on screen: "user" is someone asking an AI ` +
     `assistant for the specific thing THIS agent does, and "agent" is that assistant admitting ` +
     `it cannot. Both under 48 chars, natural speech, no mention of the agent's name.\n` +
@@ -253,6 +306,7 @@ export async function buildSpec(
         agent: clamp(ai.problemExchange?.agent?.trim() || base.problemExchange.agent, 52),
       },
       demoFlow: mergeDemoFlow(base.demoFlow, ai.demoFlow),
+      scenePlan: mergePlan(base.scenePlan ?? fallbackPlan(agent), ai.plan),
     };
   } catch (err) {
     console.error(`spec copy generation failed for agent ${agent.agentId}:`, err);

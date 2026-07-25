@@ -47,6 +47,14 @@ export const demoFlowSchema = z.object({
   resultCaption: z.string().optional(),
 });
 
+export const scenePlanSchema = z.object({
+  style: z.enum(["terminal", "playful", "saas"]).optional(),
+  hook: z.enum(["portrait", "statement", "badge"]).optional(),
+  problem: z.enum(["chat", "wall"]).optional(),
+  reveal: z.enum(["card", "banner"]).optional(),
+  services: z.enum(["list", "grid", "hero"]).optional(),
+});
+
 export const videoSpecSchema = z.object({
   agentId: z.string(),
   agentName: z.string(),
@@ -61,6 +69,7 @@ export const videoSpecSchema = z.object({
   services: z.array(serviceCardSchema),
   cta: sceneCopySchema,
   demoFlow: demoFlowSchema.optional(),
+  scenePlan: scenePlanSchema.optional(),
   musicUrl: z.string().optional(),
   narration: z.array(narrationLineSchema).optional(),
   bpm: z.number(),
@@ -69,6 +78,7 @@ export const videoSpecSchema = z.object({
 
 export type Palette = z.infer<typeof paletteSchema>;
 export type DemoFlow = z.infer<typeof demoFlowSchema>;
+export type ScenePlan = z.infer<typeof scenePlanSchema>;
 export type SceneCopy = z.infer<typeof sceneCopySchema>;
 export type ServiceCard = z.infer<typeof serviceCardSchema>;
 export type NarrationLine = z.infer<typeof narrationLineSchema>;

@@ -63,6 +63,24 @@ export type SceneKey = "hook" | "problem" | "reveal" | "demo" | "services" | "ct
 export type ResultKind = "image-grid" | "report" | "chart" | "text";
 
 /**
+ * Which composition each scene uses.
+ *
+ * This is what keeps two agents from getting the same video. The palette, copy
+ * and result card already vary — but with one fixed composition per scene the
+ * result is still recognisably a template, just reskinned. The plan makes the
+ * ARCHITECTURE per-agent: the model picks the composition that fits the agent's
+ * character, and a hash of the agent id decides when no model is configured, so
+ * no two agents collapse onto the same build either way.
+ */
+export interface ScenePlan {
+  style?: VisualStyle;
+  hook?: "portrait" | "statement" | "badge";
+  problem?: "chat" | "wall";
+  reveal?: "card" | "banner";
+  services?: "list" | "grid" | "hero";
+}
+
+/**
  * The staged x402 exchange at the centre of the video.
  *
  * This is the domain knowledge the video trades on: an OKX.ai service is bought
@@ -138,6 +156,8 @@ export interface VideoSpec {
   cta: SceneCopy;
   /** The staged call at the heart of the video. */
   demoFlow?: DemoFlow;
+  /** Per-agent choice of composition for each scene. */
+  scenePlan?: ScenePlan;
   /** Backing track, synthesized per job at `bpm` so cuts land on its beat. */
   musicUrl?: string;
   /**
