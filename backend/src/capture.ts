@@ -69,6 +69,30 @@ function copyToClipboard(text: string): Promise<void> {
   });
 }
 
+/**
+ * Collapse the Claude sidebar so the recording does not show the user's chat
+ * history. Clicks the View-menu item whose name contains "Hide Sidebar" — which
+ * only exists while the sidebar is shown, so it never re-opens a hidden one, and
+ * matching by substring survives "Hide"/"Collapse"/"Toggle" wording. Best-effort:
+ * if there is no such item the recording just keeps the sidebar.
+ */
+async function hideSidebar(): Promise<void> {
+  await runOsa(
+    `tell application "System Events" to tell process "${config.claudeAppName}"\n` +
+    `  repeat with m in menu bar items of menu bar 1\n` +
+    `    try\n` +
+    `      repeat with mi in menu items of menu 1 of m\n` +
+    `        if name of mi contains "Hide Sidebar" then\n` +
+    `          click mi\n` +
+    `          return\n` +
+    `        end if\n` +
+    `      end repeat\n` +
+    `    end try\n` +
+    `  end repeat\n` +
+    `end tell`,
+  );
+}
+
 async function runOsa(script: string): Promise<void> {
   try {
     await execFileP("osascript", ["-e", script], { timeout: 15000 });
@@ -312,7 +336,9 @@ export async function captureLiveProof(
   try {
     await copyToClipboard(prompt);
     await runOsa(`tell application "${config.claudeAppName}" to activate`);
-    await wait(2500); // let the window come forward
+    await wait(2000); // let the window come forward
+    await hideSidebar(); // collapse chat history before anything is filmed
+    await wait(700);
 
     const bounds = await claudeWindowBounds();
     const screenIndex = await resolveScreenIndex();
