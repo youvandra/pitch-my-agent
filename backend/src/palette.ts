@@ -244,14 +244,25 @@ const MIN_ACCENT_CONTRAST = 1.8;
  */
 function separateValue(accent: string, primary: string, bg: string): string {
   if (contrastRatio(accent, primary) >= MIN_ACCENT_CONTRAST) return accent;
-  const goLighter = luminance(primary) < luminance(bg) + 0.25;
+
+  // Search both directions rather than guessing one from the background. An
+  // earlier version only walked away from the backdrop, which is a dead end on
+  // a light stage: every lighter candidate fails legibility against the
+  // background, so the loop returned the accent unchanged. The saas palette
+  // came out at 1.01 — two colours 163 degrees apart and indistinguishable.
+  // A light stage leaves only a narrow band of usable lightness — everything
+  // pale enough to sit near the primary is also too pale to read on the
+  // backdrop — so the search runs to near-black at one end and near-white at
+  // the other rather than stopping at comfortable mid-tones.
   let best = accent;
-  for (let i = 1; i <= 14; i++) {
-    const step = goLighter ? 0.55 + i * 0.03 : 0.5 - i * 0.03;
-    const candidate = withLightness(accent, Math.min(0.94, Math.max(0.24, step)));
-    if (contrastRatio(candidate, bg) < 3) continue;
-    if (contrastRatio(candidate, primary) >= MIN_ACCENT_CONTRAST) return candidate;
-    if (contrastRatio(candidate, primary) > contrastRatio(best, primary)) best = candidate;
+  for (let i = 1; i <= 22; i++) {
+    for (const lightness of [0.5 + i * 0.021, 0.5 - i * 0.021]) {
+      if (lightness < 0.06 || lightness > 0.96) continue;
+      const candidate = withLightness(accent, lightness);
+      if (contrastRatio(candidate, bg) < 3) continue;
+      if (contrastRatio(candidate, primary) >= MIN_ACCENT_CONTRAST) return candidate;
+      if (contrastRatio(candidate, primary) > contrastRatio(best, primary)) best = candidate;
+    }
   }
   return best;
 }
