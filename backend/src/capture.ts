@@ -71,22 +71,40 @@ function copyToClipboard(text: string): Promise<void> {
   });
 }
 
+/**
+ * Refuse to record unless cliclick can actually drive the keyboard.
+ *
+ * Without Accessibility privileges cliclick still exits 0 — it just prints a
+ * warning and does nothing. That combination is the dangerous one: every
+ * keystroke silently no-ops while ffmpeg keeps rolling, so the "Claude segment"
+ * becomes an unscripted grab of whatever the operator happened to have on
+ * screen. A failed keystroke must cost us the segment, never leak the desktop.
+ */
+async function keystrokesAvailable(): Promise<boolean> {
+  try {
+    const { stdout, stderr } = await execFileP(config.cliclickBin, ["-V"], { timeout: 8000 });
+    if (/Accessibility privileges not enabled/i.test(stdout + stderr)) {
+      console.error(
+        "live capture: cliclick lacks Accessibility privileges — skipping the Claude segment. " +
+          "Grant it in System Settings › Privacy & Security › Accessibility.",
+      );
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("live capture: cliclick unusable:", err instanceof Error ? err.message.split("\n")[0] : err);
+    return false;
+  }
+}
+
 /** Send one cmd-chorded keystroke via cliclick (CGEvent — no Apple Events). */
 async function pressCmd(letter: string): Promise<void> {
-  try {
-    await execFileP(config.cliclickBin, ["kd:cmd", `t:${letter}`, "ku:cmd"], { timeout: 8000 });
-  } catch (err) {
-    console.warn(`cliclick cmd+${letter} failed:`, err instanceof Error ? err.message.split("\n")[0] : err);
-  }
+  await execFileP(config.cliclickBin, ["kd:cmd", `t:${letter}`, "ku:cmd"], { timeout: 8000 });
 }
 
 /** Press Escape — dismisses any open modal (Settings, dialogs) harmlessly. */
 async function pressEsc(): Promise<void> {
-  try {
-    await execFileP(config.cliclickBin, ["kp:esc"], { timeout: 8000 });
-  } catch (err) {
-    console.warn("cliclick esc failed:", err instanceof Error ? err.message.split("\n")[0] : err);
-  }
+  await execFileP(config.cliclickBin, ["kp:esc"], { timeout: 8000 });
 }
 
 // ─── Window geometry (Quartz, read-only, no permission) ──────────────────────
@@ -329,6 +347,10 @@ export async function captureLiveProof(jobId: string, agent: AgentProfile): Prom
   let claudeRecorded = false;
   let crop: { w: number; h: number; x: number; y: number } | null = null;
   try {
+    // Preflight: no working keyboard, no segment. Checked before ffmpeg starts
+    // so a privilege gap can never turn into unscripted desktop footage.
+    if (!(await keystrokesAvailable())) throw new Error("keystrokes unavailable");
+
     await copyToClipboard(prompt);
     // `open -a` brings the app forward without an Apple Event.
     await execFileP("open", ["-a", config.claudeAppName]).catch(() => {});
@@ -342,17 +364,32 @@ export async function captureLiveProof(jobId: string, agent: AgentProfile): Prom
     await pressEsc();
     await wait(500);
 
+    // Everything that changes window state happens BEFORE the camera rolls.
+    // A new chat clears the transcript and Cmd+B hides the sidebar; doing
+    // either on tape would put the operator's own chat history on screen for
+    // the frames it takes to disappear.
+    await pressCmd("n");
+    await wait(1200);
+    await pressCmd("b");
+    await wait(900);
+
     const geom = await claudeGeometry();
     const screenIndex = await resolveScreenIndex();
     const rec = startScreenRecording(claudePath, screenIndex);
     await wait(800); // ffmpeg warm-up before the action
 
-    // New chat, then paste. Deliberately NOT sent: the paid call cannot complete
-    // yet (no okx-pay wrapper), so the shot ends on the prompt sitting in Claude.
-    await pressCmd("n");
-    await wait(1100);
-    await pressCmd("v");
-    await wait(2600); // hold on the pasted prompt
+    try {
+      // Paste only. Deliberately NOT sent: the paid call cannot complete yet
+      // (no okx-pay wrapper), so the shot ends on the prompt sitting in Claude.
+      await pressCmd("v");
+      await wait(2600); // hold on the pasted prompt
+    } catch (err) {
+      // The recording is already rolling and the scripted actions did not
+      // happen, so whatever is on tape is unvetted. Stop and destroy it.
+      await rec.stop().catch(() => {});
+      fs.rmSync(claudePath, { force: true });
+      throw err;
+    }
 
     await rec.stop();
     steps.push({ step: "paste into Claude", ok: fs.existsSync(claudePath) });
