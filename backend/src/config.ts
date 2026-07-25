@@ -69,6 +69,11 @@ export const config = {
   captureScreenIndex: process.env.CAPTURE_SCREEN_INDEX || "2",
   ffmpegBin: process.env.FFMPEG_BIN || "ffmpeg",
   claudeAppName: process.env.CLAUDE_APP_NAME || "Claude",
+  // cliclick sends keystrokes via CGEvent — Accessibility only, no Apple Events
+  // (Automation entitlement is unobtainable for this background process).
+  cliclickBin: process.env.CLICLICK_BIN || "/opt/homebrew/bin/cliclick",
+  // python3 with pyobjc-framework-Quartz, for read-only window bounds.
+  pythonBin: process.env.PYTHON_BIN || "python3",
 };
 
 export const hasAi = (): boolean => !!config.sumopodApiKey;

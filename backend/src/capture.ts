@@ -7,17 +7,19 @@
 //
 // It is filmed in two pieces because no single recorder covers both:
 //   1. Browser — Playwright's recordVideo films the page content directly, so
-//      nothing but the viewport can ever be in frame (no desktop leak, no
+//      nothing but the viewport is ever in frame (no desktop leak, no
 //      permission, no avfoundation device index).
-//   2. Claude Desktop — a native app, not a page, so this piece is an ffmpeg
-//      screen grab cropped to the Claude window.
-// The two clips are then concatenated into one live segment.
+//   2. Claude Desktop — a native app, so this piece is an ffmpeg screen grab
+//      cropped to the Claude window.
+// The two clips are concatenated into one live segment.
 //
-// Selector reality: the search control on okx.ai is a button labelled "Search
-// agent or task", which is verified. Everything past it (result rows, the agent
-// page, "Use now") is NOT — the agent pages redirect when opened directly, so the
-// markup could not be inspected ahead of time. Each step is attempted
-// independently; a failure is logged with a screenshot and the run continues.
+// macOS permission note: driving another app through AppleScript / System Events
+// needs the Automation entitlement, which a background process spawned under
+// Claude Code cannot obtain (every such call returns error -1743, and no consent
+// prompt ever appears). So this file avoids Apple Events entirely: the window is
+// brought forward with `open -a`, keystrokes go through cliclick (CGEvent,
+// Accessibility only), and window bounds come from Quartz's read-only window
+// list (no permission at all).
 import { spawn, execFile } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs";
@@ -44,9 +46,9 @@ const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms)
 /**
  * The prompt a user would paste into Claude to call this agent.
  *
- * Built here from the agent's own service metadata rather than scraped from the
- * "Use now" dialog: we already have the data, and constructing it means the exact
- * text on screen is known and correct. Mirrors OKX's own "Use now" wording.
+ * Built from the agent's own service metadata rather than scraped from the "Use
+ * now" dialog: we already have the data, so the exact text on screen is known and
+ * correct. Mirrors OKX's own "Use now" wording.
  */
 function buildPrompt(agent: AgentProfile): string {
   const svc = agent.services[0];
@@ -69,46 +71,54 @@ function copyToClipboard(text: string): Promise<void> {
   });
 }
 
-/**
- * Collapse the Claude sidebar so the recording does not show the user's chat
- * history. Clicks the View-menu item whose name contains "Hide Sidebar" — which
- * only exists while the sidebar is shown, so it never re-opens a hidden one, and
- * matching by substring survives "Hide"/"Collapse"/"Toggle" wording. Best-effort:
- * if there is no such item the recording just keeps the sidebar.
- */
-async function hideSidebar(): Promise<void> {
-  await runOsa(
-    `tell application "System Events" to tell process "${config.claudeAppName}"\n` +
-    `  repeat with m in menu bar items of menu bar 1\n` +
-    `    try\n` +
-    `      repeat with mi in menu items of menu 1 of m\n` +
-    `        if name of mi contains "Hide Sidebar" then\n` +
-    `          click mi\n` +
-    `          return\n` +
-    `        end if\n` +
-    `      end repeat\n` +
-    `    end try\n` +
-    `  end repeat\n` +
-    `end tell`,
-  );
+/** Send one cmd-chorded keystroke via cliclick (CGEvent — no Apple Events). */
+async function pressCmd(letter: string): Promise<void> {
+  try {
+    await execFileP(config.cliclickBin, ["kd:cmd", `t:${letter}`, "ku:cmd"], { timeout: 8000 });
+  } catch (err) {
+    console.warn(`cliclick cmd+${letter} failed:`, err instanceof Error ? err.message.split("\n")[0] : err);
+  }
 }
 
-async function runOsa(script: string): Promise<void> {
+// ─── Window geometry (Quartz, read-only, no permission) ──────────────────────
+
+interface Geometry {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Logical width of the main display, for scaling bounds to capture pixels. */
+  logicalW: number;
+}
+
+const QUARTZ_SCRIPT = `import Quartz
+w = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID)
+c = [x for x in w if x.get('kCGWindowOwnerName') == 'Claude' and x.get('kCGWindowLayer', 0) == 0 and x.get('kCGWindowBounds', {}).get('Width', 0) > 300]
+c.sort(key=lambda x: -x['kCGWindowBounds']['Width'] * x['kCGWindowBounds']['Height'])
+lw = Quartz.CGDisplayBounds(Quartz.CGMainDisplayID()).size.width
+if c:
+    b = c[0]['kCGWindowBounds']
+    print(int(b['X']), int(b['Y']), int(b['Width']), int(b['Height']), int(lw))
+else:
+    print('NONE')`;
+
+async function claudeGeometry(): Promise<Geometry | null> {
   try {
-    await execFileP("osascript", ["-e", script], { timeout: 15000 });
+    const { stdout } = await execFileP(config.pythonBin, ["-c", QUARTZ_SCRIPT], { timeout: 8000 });
+    const parts = stdout.trim().split(/\s+/).map(Number);
+    if (parts.length === 5 && parts.every((n) => Number.isFinite(n))) {
+      const [x, y, w, h, logicalW] = parts;
+      return { x, y, w, h, logicalW };
+    }
   } catch (err) {
-    // Keystrokes need Accessibility permission; if it is not granted the paste
-    // silently fails but the recording still shows Claude open. Log, don't throw.
-    console.warn("osascript step failed (Accessibility permission?):", err instanceof Error ? err.message.split("\n")[0] : err);
+    console.warn("could not read the Claude window bounds:", err instanceof Error ? err.message.split("\n")[0] : err);
   }
+  return null;
 }
 
 // ─── Screen recording (Claude segment only) ──────────────────────────────────
 
-/**
- * Resolve the avfoundation screen index at runtime — it is not stable, since
- * cameras and mics enumerate first and their order shifts between runs.
- */
+/** Resolve the avfoundation screen index at runtime — it shifts between runs. */
 function resolveScreenIndex(): Promise<string> {
   return new Promise((resolve) => {
     const probe = spawn(config.ffmpegBin, ["-f", "avfoundation", "-list_devices", "true", "-i", ""]);
@@ -154,42 +164,14 @@ function startScreenRecording(outPath: string, screenIndex: string): Recorder {
           }
           resolve();
         });
+        // 'q' asks ffmpeg to finalise the container; a recorder wedged on a
+        // permission dialog ignores stdin, so escalate rather than hang.
         proc.stdin?.write("q");
         proc.stdin?.end();
         setTimeout(() => proc.kill("SIGTERM"), 4000);
         setTimeout(() => proc.kill("SIGKILL"), 8000);
       }),
   };
-}
-
-/** Claude window bounds in logical points: [x, y, w, h], or null. */
-async function claudeWindowBounds(): Promise<[number, number, number, number] | null> {
-  try {
-    const { stdout } = await execFileP("osascript", [
-      "-e",
-      `tell application "System Events" to tell process "${config.claudeAppName}" to get {position, size} of window 1`,
-    ], { timeout: 8000 });
-    const nums = stdout.trim().split(",").map((n) => Number(n.trim()));
-    if (nums.length === 4 && nums.every((n) => Number.isFinite(n))) {
-      return [nums[0], nums[1], nums[2], nums[3]];
-    }
-  } catch (err) {
-    console.warn("could not read the Claude window bounds:", err instanceof Error ? err.message.split("\n")[0] : err);
-  }
-  return null;
-}
-
-async function logicalScreenWidth(): Promise<number | null> {
-  try {
-    const { stdout } = await execFileP("osascript", [
-      "-e",
-      'tell application "Finder" to get bounds of window of desktop',
-    ], { timeout: 8000 });
-    const w = Number(stdout.trim().split(",")[2]);
-    return Number.isFinite(w) ? w : null;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -208,7 +190,6 @@ async function concat(
   const fit = `scale=${CAPTURE_WIDTH}:${CAPTURE_HEIGHT}:force_original_aspect_ratio=decrease,pad=${CAPTURE_WIDTH}:${CAPTURE_HEIGHT}:(ow-iw)/2:(oh-ih)/2,setsar=1`;
   const claudeChain = crop ? `crop=${crop.w}:${crop.h}:${crop.x}:${crop.y},${fit}` : fit;
   const filter = `[0:v]${fit}[a];[1:v]${claudeChain}[b];[a][b]concat=n=2:v=1[out]`;
-
   try {
     await execFileP(
       config.ffmpegBin,
@@ -224,10 +205,7 @@ async function concat(
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-export async function captureLiveProof(
-  jobId: string,
-  agent: AgentProfile,
-): Promise<CaptureResult | null> {
+export async function captureLiveProof(jobId: string, agent: AgentProfile): Promise<CaptureResult | null> {
   if (!config.liveCaptureEnabled) return null;
 
   const outDir = path.join(config.outputDir, jobId);
@@ -235,6 +213,8 @@ export async function captureLiveProof(
   const steps: CaptureResult["steps"] = [];
   const agentName = agent.name;
 
+  // Imported lazily so a deployment without Playwright still boots and can serve
+  // the animated tier.
   let chromium: typeof import("playwright").chromium;
   try {
     ({ chromium } = await import("playwright"));
@@ -284,6 +264,7 @@ export async function captureLiveProof(
       await page.goto(MARKETPLACE_URL, { waitUntil: "domcontentloaded", timeout: 45000 });
     }, 2500);
 
+    // Verified control: a button labelled "Search agent or task".
     await attempt("open search", async () => {
       await page.getByRole("button", { name: /search agent or task/i }).click({ timeout: 15000 });
     });
@@ -291,10 +272,14 @@ export async function captureLiveProof(
     await attempt("type the agent name", async () => {
       const box = page.getByRole("textbox").first();
       await box.waitFor({ state: "visible", timeout: 10000 });
+      // Typed slowly: this is footage, and instant text reads as a jump cut.
       await box.pressSequentially(agentName, { delay: 110 });
     }, 2200);
 
     await attempt("open the agent", async () => {
+      // The result row opens the agent in a new tab. To keep one continuous
+      // video, catch that tab, take its URL, close it, and navigate THIS page
+      // there — so the agent page is filmed in the same recording as the search.
       const row = page.getByRole("row", { name: new RegExp(agentName, "i") }).first();
       const target = (await row.count()) > 0 ? row : page.getByText(agentName, { exact: false }).first();
       const [popup] = await Promise.all([
@@ -315,6 +300,7 @@ export async function captureLiveProof(
       await page.getByRole("button", { name: /use now/i }).first().click({ timeout: 15000 });
     }, 2600);
   } finally {
+    // recordVideo is only finalised once the context closes.
     await context.close().catch(() => {});
     await browser.close().catch(() => {});
   }
@@ -335,25 +321,20 @@ export async function captureLiveProof(
   let crop: { w: number; h: number; x: number; y: number } | null = null;
   try {
     await copyToClipboard(prompt);
-    await runOsa(`tell application "${config.claudeAppName}" to activate`);
-    await wait(2000); // let the window come forward
-    await hideSidebar(); // collapse chat history before anything is filmed
-    await wait(700);
+    // `open -a` brings the app forward without an Apple Event.
+    await execFileP("open", ["-a", config.claudeAppName]).catch(() => {});
+    await wait(2500);
 
-    const bounds = await claudeWindowBounds();
+    const geom = await claudeGeometry();
     const screenIndex = await resolveScreenIndex();
     const rec = startScreenRecording(claudePath, screenIndex);
-    await wait(700); // ffmpeg warm-up before the action
+    await wait(800); // ffmpeg warm-up before the action
 
     // New chat, then paste. Deliberately NOT sent: the paid call cannot complete
     // yet (no okx-pay wrapper), so the shot ends on the prompt sitting in Claude.
-    await runOsa(
-      `tell application "${config.claudeAppName}" to activate\n` +
-      `delay 0.4\n` +
-      `tell application "System Events" to keystroke "n" using command down\n` +
-      `delay 0.9\n` +
-      `tell application "System Events" to keystroke "v" using command down`,
-    );
+    await pressCmd("n");
+    await wait(1100);
+    await pressCmd("v");
     await wait(2600); // hold on the pasted prompt
 
     await rec.stop();
@@ -361,15 +342,13 @@ export async function captureLiveProof(
 
     // Scale the logical window bounds to physical capture pixels for the crop.
     const dims = rec.dims();
-    const logicalW = await logicalScreenWidth();
-    if (bounds && dims && logicalW) {
-      const ratio = dims.w / logicalW;
-      const [x, y, w, h] = bounds;
+    if (geom && dims && geom.logicalW > 0) {
+      const ratio = dims.w / geom.logicalW;
       crop = {
-        x: Math.max(0, Math.round(x * ratio)),
-        y: Math.max(0, Math.round(y * ratio)),
-        w: Math.min(dims.w, Math.round(w * ratio)),
-        h: Math.min(dims.h, Math.round(h * ratio)),
+        x: Math.max(0, Math.round(geom.x * ratio)),
+        y: Math.max(0, Math.round(geom.y * ratio)),
+        w: Math.min(dims.w, Math.round(geom.w * ratio)),
+        h: Math.min(dims.h, Math.round(geom.h * ratio)),
       };
     }
     claudeRecorded = fs.existsSync(claudePath) && fs.statSync(claudePath).size > 10_000;
