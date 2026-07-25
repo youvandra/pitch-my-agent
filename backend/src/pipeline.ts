@@ -70,9 +70,10 @@ async function recordLiveSegment(
   jobId: string,
   agent: AgentProfile,
   demoRequest?: string,
+  serviceId?: string,
 ): Promise<string | undefined> {
   try {
-    const result = await captureLiveProof(jobId, agent, demoRequest);
+    const result = await captureLiveProof(jobId, agent, demoRequest, serviceId);
     if (!result) return undefined;
     const failed = result.steps.filter((s) => !s.ok);
     if (failed.length > 0) {
@@ -99,11 +100,11 @@ export async function runPipeline(jobId: string, input: GeneratePitchInput, tier
     const theme = await buildPalette(agent.agentId, agent.avatarUrl, style);
 
     setStage(jobId, "building_spec");
-    const spec = await buildSpec(agent, style, theme, tier.durationSec);
+    const spec = await buildSpec(agent, style, theme, tier.durationSec, input.serviceId);
 
     if (tier.liveSegment && input.includeLiveSegment !== false) {
       setStage(jobId, "recording_live");
-      const liveSegmentUrl = await recordLiveSegment(jobId, agent, spec.demoRequest);
+      const liveSegmentUrl = await recordLiveSegment(jobId, agent, spec.demoRequest, input.serviceId);
       if (liveSegmentUrl) spec.liveSegmentUrl = liveSegmentUrl;
     }
 

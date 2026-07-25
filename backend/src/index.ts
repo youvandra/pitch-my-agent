@@ -9,6 +9,9 @@ import { handleNativePaidCall, PAID_TOOLS } from "./native.js";
 import { rateLimit } from "./ratelimit.js";
 import { initStore, startCleanup, resolveOutputPath, getJob } from "./store.js";
 import { TIERS, jobStatus, type TierSpec } from "./pipeline.js";
+import { fetchAgent } from "./okx.js";
+import { quote } from "./pricing.js";
+import type { TierId } from "./types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIR = path.join(__dirname, "..", "..", "frontend");
@@ -42,6 +45,28 @@ const TIER_ROUTES: TierRoute[] = [
     desc: "Animated + Live-Proof Pitch — the same video with a real screen recording of the agent being used",
   },
 ];
+
+/**
+ * What one request to this tier costs.
+ *
+ * Reads the same agent metadata the pitch itself is built from, so the quote a
+ * caller sees from get_quote and the amount the 402 challenge asks for are the
+ * same computation. A request with no agentId yet — a bare validator probe —
+ * gets the base price, which is the floor advertised on the listing.
+ */
+function priceResolver(tier: TierSpec) {
+  return async (req: express.Request): Promise<string> => {
+    const args = (req.body as { params?: { arguments?: Record<string, unknown> } } | undefined)
+      ?.params?.arguments;
+    const agentId = args?.agentId;
+    if (agentId == null) {
+      return tier.id === "live-proof" ? config.priceLiveProofUsd : config.priceAnimatedUsd;
+    }
+    const agent = await fetchAgent(String(agentId));
+    const serviceId = typeof args?.serviceId === "string" ? args.serviceId : undefined;
+    return quote(agent, tier.id as TierId, serviceId).totalUsd.toFixed(2);
+  };
+}
 
 // ─── MCP transport plumbing ─────────────────────────────────────────────────
 
@@ -106,7 +131,7 @@ for (const route of TIER_ROUTES) {
     route.path,
     rateLimit,
     mcpPreflight(),
-    mcpPaidRoute(`POST ${route.path}`, route.desc, route.price),
+    mcpPaidRoute(`POST ${route.path}`, route.desc, priceResolver(route.tier)),
     handler,
   );
 

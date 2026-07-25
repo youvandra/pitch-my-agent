@@ -11,6 +11,9 @@ export interface AgentService {
   endpoint: string;
 }
 
+/** The two marketplace services this ASP sells. */
+export type TierId = "animated" | "live-proof";
+
 export interface AgentProfile {
   agentId: string;
   name: string;
@@ -145,6 +148,12 @@ export type JobStage =
 
 export interface GeneratePitchInput {
   agentId: string;
+  /**
+   * Which of the agent's services to demonstrate. Drives the price (its fee is
+   * passed through), the written brief, and the service called on camera.
+   * Omitted → the cheapest one.
+   */
+  serviceId?: string;
   style?: VisualStyle;
   /** Include the recorded live segment (premium tier). */
   includeLiveSegment?: boolean;

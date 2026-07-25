@@ -51,6 +51,7 @@ export async function handleNativePaidCall(req: Request, res: Response, tier: Ti
   try {
     const input: GeneratePitchInput = {
       agentId: String(args.agentId),
+      serviceId: typeof args.serviceId === "string" ? args.serviceId : undefined,
       style: args.style as VisualStyle | undefined,
       includeLiveSegment: args.includeLiveSegment as boolean | undefined,
       voice: args.voice as VoiceGender | undefined,

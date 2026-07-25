@@ -25,6 +25,7 @@ import { promisify } from "node:util";
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
+import { findService } from "./pricing.js";
 import type { AgentProfile } from "./types.js";
 
 const execFileP = promisify(execFile);
@@ -55,8 +56,8 @@ const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms)
  * carries those specifics, which is what turns the recording from "two agents
  * negotiating" into "the service running".
  */
-function buildPrompt(agent: AgentProfile, demoRequest?: string): string {
-  const svc = agent.services[0];
+function buildPrompt(agent: AgentProfile, demoRequest?: string, serviceId?: string): string {
+  const svc = findService(agent, serviceId);
   const lines = [`I'd like to use the service provided by Agent ${agent.agentId}:`];
   if (svc) {
     lines.push(`Service title: ${svc.name}`);
@@ -252,6 +253,7 @@ export async function captureLiveProof(
   jobId: string,
   agent: AgentProfile,
   demoRequest?: string,
+  serviceId?: string,
 ): Promise<CaptureResult | null> {
   if (!config.liveCaptureEnabled) return null;
 
@@ -270,7 +272,7 @@ export async function captureLiveProof(
     return null;
   }
 
-  const prompt = buildPrompt(agent, demoRequest);
+  const prompt = buildPrompt(agent, demoRequest, serviceId);
   const browserPath = path.join(outDir, "browser.webm");
   const claudePath = path.join(outDir, "claude.mp4");
   const outPath = path.join(outDir, "live.mp4");

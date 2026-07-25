@@ -4,6 +4,7 @@
 // template is fixed and consumes this as props, so a bad model response can
 // degrade the copy but can never break the render.
 import { config, hasAi } from "./config.js";
+import { findService } from "./pricing.js";
 import type {
   AgentProfile,
   Palette,
@@ -38,6 +39,7 @@ function fallbackSpec(
   style: VisualStyle,
   theme: Palette,
   durationSec: number,
+  serviceId?: string,
 ): VideoSpec {
   const firstSentence = agent.description.split(/(?<=\.)\s/)[0] ?? agent.description;
   return {
@@ -68,7 +70,7 @@ function fallbackSpec(
       headline: `Agent #${agent.agentId}`,
       sub: "Find it on OKX.ai and call it from your own agent.",
     },
-    demoRequest: fallbackDemoRequest(agent),
+    demoRequest: fallbackDemoRequest(agent, serviceId),
     bpm: config.bpm,
     durationSec,
   };
@@ -91,8 +93,8 @@ interface AiCopy {
  * agent, so this asks the agent to choose the specifics itself. That still
  * beats the bare "Use now" text, which leaves the agent with nothing to act on.
  */
-function fallbackDemoRequest(agent: AgentProfile): string | undefined {
-  const svc = agent.services[0];
+function fallbackDemoRequest(agent: AgentProfile, serviceId?: string): string | undefined {
+  const svc = findService(agent, serviceId);
   if (!svc) return undefined;
   return (
     `For this run, use "${svc.name}" with a representative example of your own choosing ` +
@@ -100,7 +102,7 @@ function fallbackDemoRequest(agent: AgentProfile): string | undefined {
   );
 }
 
-async function generateCopy(agent: AgentProfile): Promise<AiCopy | null> {
+async function generateCopy(agent: AgentProfile, serviceId?: string): Promise<AiCopy | null> {
   const services = agent.services
     .map((s) => `- ${s.name} ($${s.fee}): ${s.description}`)
     .join("\n");
@@ -113,7 +115,7 @@ async function generateCopy(agent: AgentProfile): Promise<AiCopy | null> {
     `"reveal":{"eyebrow":"","headline":"","sub":""},"cta":{"eyebrow":"","headline":"","sub":""},` +
     `"demoRequest":""}\n` +
     `Rules: WRITE IN ENGLISH. Headline <= 42 chars, sub <= 120 chars, eyebrow <= 18 chars.\n` +
-    `demoRequest is a real request to send to "${agent.services[0]?.name ?? "this agent"}", written ` +
+    `demoRequest is a real request to send to "${findService(agent, serviceId)?.name ?? "this agent"}", written ` +
     `as one person addressing the agent. It must already contain every input the agent needs, so ` +
     `it can start work without asking a single follow-up question — a comic agent needs the story ` +
     `and genre, a wallet scanner needs an address, a shopping agent needs the product. Invent ` +
@@ -154,12 +156,13 @@ export async function buildSpec(
   style: VisualStyle,
   theme: Palette,
   durationSec: number,
+  serviceId?: string,
 ): Promise<VideoSpec> {
-  const base = fallbackSpec(agent, style, theme, durationSec);
+  const base = fallbackSpec(agent, style, theme, durationSec, serviceId);
   if (!hasAi()) return base;
 
   try {
-    const ai = await generateCopy(agent);
+    const ai = await generateCopy(agent, serviceId);
     if (!ai) return base;
     return {
       ...base,

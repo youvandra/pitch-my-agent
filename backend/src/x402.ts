@@ -47,9 +47,33 @@ function buildPaidMiddleware(routeKey: string, description: string, priceUsd: st
   ) as unknown as Handler;
 }
 
-export function paidRoute(routeKey: string, description: string, priceUsd: string): Handler {
-  return (req, res, next) => {
+/**
+ * Resolve what this specific request costs.
+ *
+ * The live-proof tier pays the demoed agent's own fee on top of our base, and
+ * those fees differ per agent and per service, so the amount cannot be baked
+ * into the route. The resolver runs before the challenge is issued and returns
+ * the same number `get_quote` reports for the same arguments.
+ */
+export type PriceResolver = (req: Request) => Promise<string>;
+
+export function paidRoute(routeKey: string, description: string, resolvePrice: PriceResolver): Handler {
+  return async (req, res, next) => {
     if (!x402Enabled()) return next();
+
+    let priceUsd: string;
+    try {
+      priceUsd = await resolvePrice(req);
+    } catch (err) {
+      // Pricing needs the target agent's metadata. If that lookup fails we
+      // cannot name an honest number, and charging a guessed one is worse than
+      // failing: the caller would pay for something we could not quote.
+      console.error("could not price the request:", err instanceof Error ? err.message : err);
+      res.status(503).json({
+        error: "could not read the target agent's services to price this request — try again shortly",
+      });
+      return;
+    }
 
     const hasProof =
       req.headers["payment-signature"] ||
@@ -58,10 +82,13 @@ export function paidRoute(routeKey: string, description: string, priceUsd: strin
       req.headers["x402-payment"];
 
     if (hasProof) {
-      let mw = paidCache.get(routeKey);
+      // Keyed by price too: one middleware per (route, amount) pair, since the
+      // amount is now part of what the middleware verifies.
+      const cacheKey = `${routeKey}@${priceUsd}`;
+      let mw = paidCache.get(cacheKey);
       if (!mw) {
         mw = buildPaidMiddleware(routeKey, description, priceUsd);
-        paidCache.set(routeKey, mw);
+        paidCache.set(cacheKey, mw);
       }
       return void mw(req, res, next);
     }
@@ -71,7 +98,7 @@ export function paidRoute(routeKey: string, description: string, priceUsd: strin
 
 // Read-only / polling tools stay free so a caller can discover the service and
 // poll a running job without paying. Only generation is metered.
-const FREE_TOOLS = new Set(["get_quota", "get_job", "preview_spec"]);
+const FREE_TOOLS = new Set(["get_quota", "get_quote", "get_job", "preview_spec"]);
 
 /**
  * x402 gate for an MCP endpoint. MCP protocol/discovery methods (initialize,
@@ -79,8 +106,12 @@ const FREE_TOOLS = new Set(["get_quota", "get_job", "preview_spec"]);
  * the OKX listing validator — can complete the handshake and discover tools.
  * Gating the whole endpoint 402s the handshake itself, and the review times out.
  */
-export function mcpPaidRoute(routeKey: string, description: string, priceUsd: string): Handler {
-  const paid = paidRoute(routeKey, description, priceUsd);
+export function mcpPaidRoute(
+  routeKey: string,
+  description: string,
+  resolvePrice: PriceResolver,
+): Handler {
+  const paid = paidRoute(routeKey, description, resolvePrice);
   return (req, res, next) => {
     const body = req.body as { method?: string; params?: { name?: string } } | undefined;
     if (body?.method !== "tools/call") return next();
