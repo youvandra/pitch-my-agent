@@ -141,16 +141,23 @@ function localizeProps(jobId: string, spec: VideoSpec, origin: string): VideoSpe
   };
 }
 
+/** Jobs currently rendering. Their directories are in use and must survive a prune. */
+const rendering = new Set<string>();
+
 /**
- * Delete every other job's output. Local iteration only — renders are large and
- * pile up fast while tuning — and gated behind a flag because in production this
- * would destroy deliveries buyers already paid for.
+ * Delete every finished job's output. Local iteration only — renders are large
+ * and pile up fast while tuning — and gated behind a flag because in production
+ * this would destroy deliveries buyers already paid for.
+ *
+ * In-flight jobs are exempt. Two renders started together, and the second
+ * deleted the first's props.json out from under Remotion mid-render; the job
+ * died with "You passed --props but it was neither valid JSON nor a file path".
  */
 function prunePreviousRenders(keepJobId: string): void {
   if (!config.prunePreviousRenders) return;
   try {
     for (const entry of fs.readdirSync(config.outputDir)) {
-      if (entry === keepJobId || entry === "jobs") continue;
+      if (entry === keepJobId || entry === "jobs" || rendering.has(entry)) continue;
       fs.rmSync(path.join(config.outputDir, entry), { recursive: true, force: true });
     }
   } catch (err) {
@@ -161,6 +168,7 @@ function prunePreviousRenders(keepJobId: string): void {
 export async function renderVideo(jobId: string, spec: VideoSpec): Promise<RenderResult> {
   const outDir = path.join(config.outputDir, jobId);
   fs.mkdirSync(outDir, { recursive: true });
+  rendering.add(jobId);
   prunePreviousRenders(jobId);
 
   const propsPath = path.join(outDir, "props.json");
@@ -189,6 +197,7 @@ export async function renderVideo(jobId: string, spec: VideoSpec): Promise<Rende
       return { videoPath, thumbnailPath, resolution: "1920x1080" };
     } finally {
       assets.close();
+      rendering.delete(jobId);
     }
   });
 }
