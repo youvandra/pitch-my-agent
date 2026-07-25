@@ -226,6 +226,35 @@ function rotateHue(color: string, degrees: number): string {
 
 /** Least hue separation before two colours stop reading as two colours. */
 const MIN_ACCENT_HUE_SEPARATION = 40;
+/**
+ * Least contrast between primary and accent.
+ *
+ * Hue separation alone is not enough. Rotating a colour round the wheel keeps
+ * its lightness, so the pair differs in hue while sitting at the same value —
+ * they vibrate against each other and neither can lead, because nothing tells
+ * the eye which is more important. Measured across twelve marketplace avatars,
+ * synthesized accents came out between 1.03 and 1.63; a value step of 1.8 is
+ * what makes one of them read as the highlight.
+ */
+const MIN_ACCENT_CONTRAST = 1.8;
+
+/**
+ * Push an accent away from the primary in lightness, without losing the
+ * background legibility it already has.
+ */
+function separateValue(accent: string, primary: string, bg: string): string {
+  if (contrastRatio(accent, primary) >= MIN_ACCENT_CONTRAST) return accent;
+  const goLighter = luminance(primary) < luminance(bg) + 0.25;
+  let best = accent;
+  for (let i = 1; i <= 14; i++) {
+    const step = goLighter ? 0.55 + i * 0.03 : 0.5 - i * 0.03;
+    const candidate = withLightness(accent, Math.min(0.94, Math.max(0.24, step)));
+    if (contrastRatio(candidate, bg) < 3) continue;
+    if (contrastRatio(candidate, primary) >= MIN_ACCENT_CONTRAST) return candidate;
+    if (contrastRatio(candidate, primary) > contrastRatio(best, primary)) best = candidate;
+  }
+  return best;
+}
 
 /**
  * Choose an accent that is actually a second colour.
@@ -244,9 +273,10 @@ function pickAccent(primary: string, candidates: string[], bg: string): string {
   const distinct = candidates.find(
     (c) => hueDistance(c, primary) >= MIN_ACCENT_HUE_SEPARATION,
   );
-  // 150 degrees: clearly a different colour, without the vibration of a exact
+  // 150 degrees: clearly a different colour, without the vibration of an exact
   // complement sitting next to the primary.
-  return ensureReadable(distinct ?? rotateHue(primary, 150), bg);
+  const hue = ensureReadable(distinct ?? rotateHue(primary, 150), bg);
+  return separateValue(hue, primary, bg);
 }
 
 /**
@@ -266,6 +296,25 @@ function ensureReadable(color: string, bg: string, minRatio = 4.5): string {
     if (contrastRatio(candidate, bg) >= minRatio) return candidate;
   }
   return bgIsDark ? "#F4F1E9" : "#0F172A";
+}
+
+/**
+ * Apply the palette's guarantees, whatever produced it.
+ *
+ * The vision model proposes; it does not decide. Left to itself it returns
+ * plausible-looking pairs that fail in motion — two colours at the same value,
+ * or an accent that vanishes on the backdrop — and because its output used to be
+ * taken verbatim, the rules below only ever applied when no model was
+ * configured. That is backwards: a model is one more source of a proposal, and
+ * every proposal gets the same treatment.
+ */
+function enforceGuarantees(p: Palette): Palette {
+  const primary = ensureReadable(p.primary, p.bg);
+  const accent =
+    hueDistance(p.accent, primary) >= MIN_ACCENT_HUE_SEPARATION
+      ? separateValue(ensureReadable(p.accent, p.bg), primary, p.bg)
+      : pickAccent(primary, [], p.bg);
+  return { ...p, primary, accent };
 }
 
 /**
@@ -317,6 +366,7 @@ export async function buildPalette(
     palette = fallback;
   }
 
+  palette = enforceGuarantees(palette);
   cachePalette(cacheKey, palette);
   return palette;
 }
