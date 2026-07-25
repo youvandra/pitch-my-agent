@@ -604,3 +604,55 @@ export const LaptopMockup: React.FC<{ theme: Palette; width?: number; children: 
     </div>
   );
 };
+
+/**
+ * The settled payment, rendered as a receipt strip under the live footage.
+ *
+ * Every value is read back from the actual x402 settlement — amount, asset,
+ * network, paying wallet. Nothing here is composed for the video, because a
+ * fabricated figure would undo the one thing this tier sells. The wallet is
+ * shortened the way a block explorer shortens it, not hidden: it is a public
+ * address, and being checkable is the point.
+ */
+export const ReceiptStrip: React.FC<{
+  theme: Palette;
+  amountUsd: number;
+  asset: string;
+  network: string;
+  wallet?: string;
+  serviceName?: string;
+}> = ({ theme, amountUsd, asset, network, wallet, serviceName }) => {
+  const short = wallet && wallet.length > 12 ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : wallet;
+  const cells: Array<[string, string]> = [
+    ["paid", `$${amountUsd.toFixed(2)} ${asset}`],
+    ["on", network],
+  ];
+  if (serviceName) cells.push(["for", serviceName]);
+  if (short) cells.push(["from", short]);
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 46,
+        alignItems: "baseline",
+        justifyContent: "center",
+        marginTop: 30,
+        padding: "18px 34px",
+        borderRadius: 14,
+        background: theme.bg2,
+        border: `1px solid ${theme.primary}33`,
+        fontFamily: FONT_MONO,
+      }}
+    >
+      {cells.map(([label, value]) => (
+        <div key={label} style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+          <span style={{ color: theme.muted, fontSize: 20, letterSpacing: "0.18em", textTransform: "uppercase" }}>
+            {label}
+          </span>
+          <span style={{ color: theme.text, fontSize: 26, fontWeight: 600 }}>{value}</span>
+        </div>
+      ))}
+    </div>
+  );
+};

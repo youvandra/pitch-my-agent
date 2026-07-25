@@ -107,6 +107,22 @@ export interface VideoSpec {
   /** Absolute/relative URL of the recorded live segment, when present. */
   liveSegmentUrl?: string;
   /**
+   * The settled payment behind the live segment, shown as a receipt card.
+   *
+   * Claude Desktop runs a paid request as a background session and stays on its
+   * home screen, so the work itself cannot be filmed without also filming the
+   * operator's private screen. These figures come from okx-pay's receipt, which
+   * means the proof survives without the camera following anything.
+   */
+  liveProof?: {
+    amountUsd: number;
+    asset: string;
+    network: string;
+    wallet?: string;
+    serviceName?: string;
+    agentId?: string;
+  };
+  /**
    * A concrete, ready-to-run request for the agent's first service.
    *
    * The marketplace's own "Use now" text only names the service, so the agent

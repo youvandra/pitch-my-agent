@@ -43,6 +43,13 @@ const CAPTURE_HEIGHT = 800;
 export interface CaptureResult {
   file: string;
   steps: Array<{ step: string; ok: boolean; note?: string }>;
+  /** The settled payment, when one happened, for the receipt card. */
+  proof?: {
+    amountUsd: number;
+    asset: string;
+    network: string;
+    wallet?: string;
+  };
 }
 
 const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -768,5 +775,10 @@ export async function captureLiveProof(
     /* leftovers are untidy, not fatal */
   }
 
-  return { file, steps };
+  const proof =
+    receipt?.paid && typeof receipt.amountUsd === "number"
+      ? { amountUsd: receipt.amountUsd, asset: "USD₮0", network: "X Layer", wallet: receipt.wallet }
+      : undefined;
+
+  return { file, steps, proof };
 }

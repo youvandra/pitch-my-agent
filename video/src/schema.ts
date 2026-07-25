@@ -52,6 +52,21 @@ export const videoSpecSchema = z.object({
   services: z.array(serviceCardSchema),
   cta: sceneCopySchema,
   liveSegmentUrl: z.string().optional(),
+  /**
+   * What the recorded call actually cost and where it went. Every field is read
+   * back from the settled payment, never composed for the video — this card is
+   * the receipt, so an invented number would make the whole tier a lie.
+   */
+  liveProof: z
+    .object({
+      amountUsd: z.number(),
+      asset: z.string(),
+      network: z.string(),
+      wallet: z.string().optional(),
+      serviceName: z.string().optional(),
+      agentId: z.string().optional(),
+    })
+    .optional(),
   musicUrl: z.string().optional(),
   narration: z.array(narrationLineSchema).optional(),
   bpm: z.number(),

@@ -7,7 +7,8 @@ import { buildPalette } from "./palette.js";
 import { buildSpec, buildScript } from "./spec.js";
 import { synthesizeNarration } from "./voice.js";
 import { writeMusic } from "./music.js";
-import { captureLiveProof } from "./capture.js";
+import { captureLiveProof, type CaptureResult } from "./capture.js";
+import { findService } from "./pricing.js";
 import { renderVideo } from "./render.js";
 import { setStage, completeJob, failJob, getJob } from "./store.js";
 import type { AgentProfile, Delivery, GeneratePitchInput, NarrationLine, VisualStyle } from "./types.js";
@@ -72,7 +73,7 @@ async function recordLiveSegment(
   agent: AgentProfile,
   demoRequest?: string,
   serviceId?: string,
-): Promise<string | undefined> {
+): Promise<{ url: string; proof?: CaptureResult["proof"] } | undefined> {
   try {
     const result = await captureLiveProof(jobId, agent, demoRequest, serviceId);
     if (!result) return undefined;
@@ -83,7 +84,7 @@ async function recordLiveSegment(
           failed.map((s) => s.step).join(", "),
       );
     }
-    return publicUrl(jobId, result.file);
+    return { url: publicUrl(jobId, result.file), proof: result.proof };
   } catch (err) {
     console.error(`live capture failed for job ${jobId}:`, err);
     return undefined;
@@ -105,8 +106,17 @@ export async function runPipeline(jobId: string, input: GeneratePitchInput, tier
 
     if (tier.liveSegment && input.includeLiveSegment !== false) {
       setStage(jobId, "recording_live");
-      const liveSegmentUrl = await recordLiveSegment(jobId, agent, spec.demoRequest, input.serviceId);
-      if (liveSegmentUrl) spec.liveSegmentUrl = liveSegmentUrl;
+      const live = await recordLiveSegment(jobId, agent, spec.demoRequest, input.serviceId);
+      if (live) {
+        spec.liveSegmentUrl = live.url;
+        if (live.proof) {
+          spec.liveProof = {
+            ...live.proof,
+            serviceName: findService(agent, input.serviceId)?.name,
+            agentId: agent.agentId,
+          };
+        }
+      }
     }
 
     if (input.voiceover !== false) {
