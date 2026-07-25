@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Audio, Easing, Sequence, interpolate, useCurrentFrame } from "remotion";
 import { sceneFrames, type SceneName, type VideoSpec } from "./schema";
-import { Caption } from "./ui";
+import { Caption, CaptionSpace } from "./ui";
 import { SceneCta, SceneHook, SceneProblem, SceneReveal, SceneServices } from "./scenes";
 
 const FADE = 9;
@@ -66,7 +66,7 @@ export const Video: React.FC<VideoSpec> = (spec) => {
       {spec.musicUrl ? <Audio src={spec.musicUrl} volume={0.22} /> : null}
       {ORDER.map((name, index) => {
         const dur = frames[name];
-        // A zero-length scene (e.g. no live segment) is skipped entirely.
+        // A zero-length scene is skipped entirely.
         if (dur <= 0) return null;
         const Scene = COMPONENTS[name];
         const line = voice.get(name);
@@ -77,7 +77,9 @@ export const Video: React.FC<VideoSpec> = (spec) => {
                 sliding the caption with the scene makes it hard to read. */}
             {line ? <Audio src={line.audioUrl} /> : null}
             <Transition dur={dur} dir={index % 2 === 0 ? 1 : -1}>
-              <Scene spec={spec} />
+              <CaptionSpace.Provider value={!!line}>
+                <Scene spec={spec} />
+              </CaptionSpace.Provider>
             </Transition>
             {line ? (
               <Caption theme={spec.theme} text={line.text} durationSec={line.durationSec} />

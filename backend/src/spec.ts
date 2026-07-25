@@ -24,10 +24,33 @@ function clamp(text: string, max: number): string {
   return `${(lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).replace(/[,;:.\s]+$/, "")}…`;
 }
 
+/**
+ * Trim a service description to something that ends properly.
+ *
+ * Hard-clamping every description put an ellipsis on all four rows of the price
+ * list, which reads as a rendering bug rather than an edit. Most of these
+ * descriptions open with a sentence that says the thing and then continue into
+ * detail, so taking whole sentences while they fit gives a clean ending far
+ * more often than not. The word-clamp remains for the ones written as a single
+ * long sentence.
+ */
+function summarize(text: string, max: number): string {
+  const sentences = text.match(/[^.!?]+[.!?]+/g);
+  if (sentences) {
+    let kept = "";
+    for (const sentence of sentences) {
+      if ((kept + sentence).trim().length > max) break;
+      kept += sentence;
+    }
+    if (kept.trim().length > 0) return kept.trim();
+  }
+  return clamp(text, max);
+}
+
 function serviceCards(agent: AgentProfile): ServiceCard[] {
   return agent.services.slice(0, MAX_CARDS).map((s) => ({
     name: s.name,
-    description: clamp(s.description, 96),
+    description: summarize(s.description, 112),
     price: s.fee ? `$${Number(s.fee).toFixed(2)}` : "—",
   }));
 }

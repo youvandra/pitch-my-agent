@@ -55,11 +55,23 @@ export type Align = "center" | "left";
  * look accidental. The backdrop drifts continuously so a scene is never
  * completely static, even while nothing is animating.
  */
+/**
+ * Whether the scene being rendered carries a caption.
+ *
+ * Stage reserves room at the bottom for the caption strip. That reserve is
+ * correct when a line is spoken and pure dead space when none is — a silent
+ * render pushed every scene up by half of it and left the bottom of the frame
+ * empty. The reserve is now conditional, so the composition is centred in the
+ * space actually available.
+ */
+export const CaptionSpace = React.createContext(false);
+
 export const Stage: React.FC<{
   theme: Palette;
   align?: Align;
   children: React.ReactNode;
 }> = ({ theme, align = "center", children }) => {
+  const hasCaption = React.useContext(CaptionSpace);
   const frame = useCurrentFrame();
   const drift = Math.sin(frame / 110) * 3;
   const glow = 0.1 + Math.sin(frame / 75) * 0.025;
@@ -75,8 +87,8 @@ export const Stage: React.FC<{
         alignItems: align === "center" ? "center" : "flex-start",
         justifyContent: "center",
         textAlign: align,
-        // Extra bottom padding keeps scene content clear of the caption strip.
-        padding: "0 132px 150px",
+        // Room for the caption strip, but only when there is a caption.
+        padding: `0 132px ${hasCaption ? 150 : 56}px`,
         overflow: "hidden",
       }}
     >
@@ -344,29 +356,43 @@ export const AgentCard: React.FC<{
 );
 
 /** A chat bubble — used to stage the "agent hits a wall" moment. */
+/**
+ * One line of the staged exchange.
+ *
+ * The two speakers are opposed across the frame, which is what makes it read as
+ * a conversation rather than a list — the alignment lives here rather than on
+ * the caller, because an animation wrapper between the bubble and the flex
+ * column silently swallowed `alignSelf` and left both messages hard left.
+ *
+ * Neither bubble carries the brand colour. This scene is the gap the agent
+ * fills, so tinting the refusal with the agent's own colour attaches its
+ * identity to the thing that failed; the request reads as ordinary and the
+ * refusal reads as dimmed, and the brand arrives with the agent in the reveal.
+ */
 export const Bubble: React.FC<{
   theme: Palette;
   from: "user" | "agent";
   children: React.ReactNode;
   width?: number;
 }> = ({ theme, from, children, width = 660 }) => (
-  <div
-    style={{
-      width,
-      alignSelf: from === "user" ? "flex-end" : "flex-start",
-      background: from === "user" ? theme.bg2 : `${theme.primary}1f`,
-      border: `1px solid ${from === "user" ? theme.muted + "33" : theme.primary + "55"}`,
-      borderRadius: 20,
-      borderBottomRightRadius: from === "user" ? 6 : 20,
-      borderBottomLeftRadius: from === "user" ? 20 : 6,
-      padding: "22px 26px",
-      fontSize: 30,
-      lineHeight: 1.35,
-      color: theme.text,
-      textAlign: "left",
-    }}
-  >
-    {children}
+  <div style={{ display: "flex", justifyContent: from === "user" ? "flex-end" : "flex-start" }}>
+    <div
+      style={{
+        width,
+        background: from === "user" ? theme.bg2 : "transparent",
+        border: `1px solid ${theme.muted}${from === "user" ? "33" : "22"}`,
+        borderRadius: 20,
+        borderBottomRightRadius: from === "user" ? 6 : 20,
+        borderBottomLeftRadius: from === "user" ? 20 : 6,
+        padding: "22px 26px",
+        fontSize: 30,
+        lineHeight: 1.35,
+        color: from === "user" ? theme.text : theme.muted,
+        textAlign: "left",
+      }}
+    >
+      {children}
+    </div>
   </div>
 );
 
