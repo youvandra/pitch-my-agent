@@ -207,6 +207,19 @@ export const Counter: React.FC<{
   );
 };
 
+// ─── Colour roles ────────────────────────────────────────────────────────────
+//
+// Two brand colours are extracted per agent, and they only help if each has a
+// job. Without one, everything reached for `primary` and the second colour went
+// unused — sixteen usages to zero — which is how a palette with a guaranteed
+// second colour still rendered as a single flat hue.
+//
+//   text / muted   prose: headlines, descriptions, supporting lines
+//   primary        the agent's own mark: scene labels, avatar, framing
+//   accent         values a buyer scans: prices, ids, badges, emphasis
+//
+// The split matters most on the price list, where the numbers are the content.
+
 // ─── Typography ──────────────────────────────────────────────────────────────
 
 export const Eyebrow: React.FC<{ theme: Palette; delay?: number; children: React.ReactNode }> = ({
@@ -264,9 +277,9 @@ export const Sub: React.FC<{ theme: Palette; delay?: number; children: React.Rea
   </BlurIn>
 );
 
-/** Accent-coloured inline span. */
+/** Inline emphasis — an id, a figure, the word the line turns on. */
 export const A: React.FC<{ theme: Palette; children: React.ReactNode }> = ({ theme, children }) => (
-  <span style={{ color: theme.primary }}>{children}</span>
+  <span style={{ color: theme.accent }}>{children}</span>
 );
 
 // ─── Illustrative objects ────────────────────────────────────────────────────
@@ -338,8 +351,8 @@ export const AgentCard: React.FC<{
             fontFamily: FONT_MONO,
             fontSize: 20,
             fontWeight: 700,
-            color: theme.primary,
-            border: `1px solid ${theme.primary}66`,
+            color: theme.accent,
+            border: `1px solid ${theme.accent}66`,
             borderRadius: 999,
             padding: "4px 14px",
           }}
@@ -421,14 +434,28 @@ export const ServiceRow: React.FC<{
     >
       <div style={{ minWidth: 0 }}>
         <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 36, color: theme.text }}>{name}</div>
-        <div style={{ fontSize: 25, color: theme.muted, marginTop: 6 }}>{description}</div>
+        {/* One line, always. A description that wraps makes its row taller
+            than the others, and a price list whose rows are different heights
+            stops reading as a list. */}
+        <div
+          style={{
+            fontSize: 25,
+            color: theme.muted,
+            marginTop: 6,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {description}
+        </div>
       </div>
       <div
         style={{
           fontFamily: FONT_MONO,
           fontSize: 40,
           fontWeight: 700,
-          color: theme.primary,
+          color: theme.accent,
           whiteSpace: "nowrap",
         }}
       >
