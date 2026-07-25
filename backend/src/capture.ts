@@ -604,6 +604,12 @@ export async function captureLiveProof(
     await wait(800); // ffmpeg warm-up before the action
 
     try {
+      // Select first, so the paste REPLACES whatever draft the composer was
+      // holding. Without this a leftover draft is prepended to the prompt and
+      // gets sent along with it — one run opened with three stray lines from an
+      // unrelated test.
+      await pressCmd("a");
+      await wait(400);
       await pressCmd("v");
       await wait(1800); // let the pasted prompt be readable before it is sent
       await pressSend();
