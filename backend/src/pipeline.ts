@@ -22,6 +22,7 @@ export interface TierSpec {
 export const TIERS: Record<string, TierSpec> = {
   animated: { id: "animated", durationSec: 60, liveSegment: false },
   "live-proof": { id: "live-proof", durationSec: 100, liveSegment: true },
+  "live-proof-plus": { id: "live-proof-plus", durationSec: 100, liveSegment: true },
 };
 
 /** Rough ETA so a caller knows how long to poll for. */

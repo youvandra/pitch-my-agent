@@ -18,9 +18,12 @@ export const config = {
 
   priceAnimatedUsd: process.env.PRICE_ANIMATED_USD || "2.00",
   priceLiveProofUsd: process.env.PRICE_LIVE_PROOF_USD || "4.00",
-  // Most a single pitch will pay the demoed agent for its own service. Above
-  // this the live call is skipped rather than silently eating the difference.
-  maxPassthroughUsd: process.env.MAX_PASSTHROUGH_USD || "1.00",
+  priceLiveProofPlusUsd: process.env.PRICE_LIVE_PROOF_PLUS_USD || "6.00",
+  // Highest target-service fee each live tier pays for. A service above the top
+  // ceiling is refused before payment rather than delivered without its live
+  // segment — see pricing.ts.
+  maxServiceFeeLiveProofUsd: process.env.MAX_SERVICE_FEE_LIVE_PROOF_USD || "1.00",
+  maxServiceFeeLiveProofPlusUsd: process.env.MAX_SERVICE_FEE_LIVE_PROOF_PLUS_USD || "3.00",
 
   // AI layer. Without a key the deterministic fallback runs, so a video is
   // still produced — just with generic copy and an extraction-only palette.

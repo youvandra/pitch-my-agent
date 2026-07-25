@@ -1,39 +1,48 @@
-// Per-agent pricing.
+// Which tier can demo which service, and what it costs.
 //
-// A flat price cannot be honest for the live-proof tier. That tier pays the
-// target agent's own fee to produce real footage of its service running, and
-// those fees are set by other people: $0.50 on one agent, $3 on the next. A
-// fixed $4 either loses money on the expensive ones or overcharges everyone for
-// the cheap ones.
+// The live tiers pay the target agent's own fee to film its service actually
+// running, and those fees belong to other people: $0.50 on one service, $3 on
+// the next. A single flat price either loses money on the expensive ones or
+// overcharges everyone for the cheap ones.
 //
-// So the price is quoted per request: our own work is a fixed base, the demoed
-// service's fee is passed through at cost, and `get_quote` (free) lets a caller
-// see every option before paying. The same function computes the number quoted
-// and the number charged, so the two can never disagree.
+// The fix is price bands rather than a per-request quote. Each tier is a
+// separate marketplace listing with a fixed fee — which is what an A2MCP
+// listing requires anyway — and covers target services up to a stated ceiling.
+// Past the top band the pitch is refused before payment, with the reason, since
+// producing it would cost us more than it earns.
 import { config } from "./config.js";
 import type { AgentProfile, AgentService, TierId } from "./types.js";
 
-export interface ServiceQuote {
-  serviceId?: string;
-  serviceName: string;
-  /** The agent's own listed fee for this service, in USD. */
-  serviceFeeUsd: number;
-  /** What we pay that agent to record its service running. 0 on the animated tier. */
-  passthroughUsd: number;
-  /** Our own work: research, script, palette, narration, render. */
-  baseUsd: number;
-  totalUsd: number;
-  /**
-   * Set when the service costs more than `maxPassthroughUsd`. The pitch is still
-   * produced and the price stays at base — the live segment then shows the
-   * marketplace listing and the delivered artifact, without a paid call.
-   */
-  liveCallSkipped?: string;
+/** What a tier charges, and the most it can pay the demoed agent. */
+export interface TierPricing {
+  endpoint: string;
+  priceUsd: number;
+  /** Highest target-service fee this tier covers. 0 for the animated tier. */
+  maxServiceFeeUsd: number;
 }
 
-const money = (n: number): number => Math.round(n * 100) / 100;
+export const TIER_PRICING: Record<TierId, TierPricing> = {
+  animated: {
+    endpoint: "/pitch/animated",
+    priceUsd: Number(config.priceAnimatedUsd),
+    maxServiceFeeUsd: 0,
+  },
+  "live-proof": {
+    endpoint: "/pitch/live-proof",
+    priceUsd: Number(config.priceLiveProofUsd),
+    maxServiceFeeUsd: Number(config.maxServiceFeeLiveProofUsd),
+  },
+  "live-proof-plus": {
+    endpoint: "/pitch/live-proof-plus",
+    priceUsd: Number(config.priceLiveProofPlusUsd),
+    maxServiceFeeUsd: Number(config.maxServiceFeeLiveProofPlusUsd),
+  },
+};
 
-const feeUsd = (svc: AgentService): number => {
+/** Live tiers, cheapest first — the order they should be offered in. */
+const LIVE_TIERS: TierId[] = ["live-proof", "live-proof-plus"];
+
+export const feeUsd = (svc: AgentService): number => {
   const n = Number(svc.fee);
   return Number.isFinite(n) && n > 0 ? n : 0;
 };
@@ -52,55 +61,82 @@ export function findService(agent: AgentProfile, serviceId?: string): AgentServi
   );
 }
 
-/**
- * Price one pitch. Deterministic: the quote a caller reads and the amount the
- * 402 challenge asks for come from this same call.
- */
-export function quote(agent: AgentProfile, tier: TierId, serviceId?: string): ServiceQuote {
-  const base = Number(tier === "live-proof" ? config.priceLiveProofUsd : config.priceAnimatedUsd);
-  const svc = findService(agent, serviceId);
-  const fee = svc ? feeUsd(svc) : 0;
+/** Cheapest live tier whose ceiling covers this fee, or undefined if none does. */
+export function tierForFee(fee: number): TierId | undefined {
+  return LIVE_TIERS.find((t) => fee <= TIER_PRICING[t].maxServiceFeeUsd);
+}
 
-  // The animated tier never calls the agent, so it never pays one.
-  if (tier !== "live-proof" || !svc) {
-    return {
-      serviceId: svc?.serviceId,
-      serviceName: svc?.name ?? "—",
-      serviceFeeUsd: fee,
-      passthroughUsd: 0,
-      baseUsd: base,
-      totalUsd: money(base),
-    };
-  }
+export interface ServiceOption {
+  serviceId?: string;
+  serviceName: string;
+  serviceFeeUsd: number;
+  /** Tier that can demo this service live, if any. */
+  tier?: TierId;
+  endpoint?: string;
+  priceUsd?: number;
+  /** Set when no live tier covers this service. */
+  unsupported?: string;
+}
 
-  const cap = Number(config.maxPassthroughUsd);
-  if (fee > cap) {
+/** Price one service against the live tiers. Backs the free `get_quote` tool. */
+export function optionFor(svc: AgentService): ServiceOption {
+  const fee = feeUsd(svc);
+  const tier = tierForFee(fee);
+  if (!tier) {
+    const top = TIER_PRICING["live-proof-plus"];
     return {
       serviceId: svc.serviceId,
       serviceName: svc.name,
       serviceFeeUsd: fee,
-      passthroughUsd: 0,
-      baseUsd: base,
-      totalUsd: money(base),
-      liveCallSkipped:
-        `"${svc.name}" costs $${fee.toFixed(2)}, above the $${cap.toFixed(2)} per-pitch cap. ` +
-        `The pitch is still produced and priced at $${money(base).toFixed(2)}, but the live segment ` +
-        `shows the marketplace listing rather than a paid call. Pick a cheaper service to include one.`,
+      unsupported:
+        `"${svc.name}" costs $${fee.toFixed(2)}. The highest live tier covers services up to ` +
+        `$${top.maxServiceFeeUsd.toFixed(2)}, so we cannot buy a real call to it — filming this one ` +
+        `would cost us more than the pitch earns. Pick a cheaper service from this agent, or use ` +
+        `${TIER_PRICING.animated.endpoint} for an animated pitch with no recorded call.`,
     };
   }
-
+  const pricing = TIER_PRICING[tier];
   return {
     serviceId: svc.serviceId,
     serviceName: svc.name,
     serviceFeeUsd: fee,
-    passthroughUsd: fee,
-    baseUsd: base,
-    totalUsd: money(base + fee),
+    tier,
+    endpoint: pricing.endpoint,
+    priceUsd: pricing.priceUsd,
   };
 }
 
-/** Every service the caller could pick, priced. Backs the free `get_quote` tool. */
-export function quoteAll(agent: AgentProfile, tier: TierId): ServiceQuote[] {
-  if (agent.services.length === 0) return [quote(agent, tier)];
-  return agent.services.map((s) => quote(agent, tier, s.serviceId ?? s.name));
+export function optionsFor(agent: AgentProfile): ServiceOption[] {
+  return agent.services.map(optionFor);
+}
+
+/**
+ * Reject a paid call this tier cannot honour, BEFORE payment.
+ *
+ * Charging for a live-proof pitch and then quietly delivering one without the
+ * live segment would be taking money for the thing that defines the tier.
+ * Returns an error message, or null when the tier can do the job.
+ */
+export function tierMismatch(
+  agent: AgentProfile,
+  tier: TierId,
+  serviceId?: string,
+): string | null {
+  if (tier === "animated") return null;
+  const svc = findService(agent, serviceId);
+  if (!svc) return null; // No services to demo: handled as a normal degrade.
+
+  const fee = feeUsd(svc);
+  const ceiling = TIER_PRICING[tier].maxServiceFeeUsd;
+  if (fee <= ceiling) return null;
+
+  const better = tierForFee(fee);
+  if (better) {
+    const p = TIER_PRICING[better];
+    return (
+      `"${svc.name}" costs $${fee.toFixed(2)}, above the $${ceiling.toFixed(2)} this tier covers. ` +
+      `Use ${p.endpoint} ($${p.priceUsd.toFixed(2)}) for this service, or pick a cheaper one.`
+    );
+  }
+  return optionFor(svc).unsupported ?? null;
 }

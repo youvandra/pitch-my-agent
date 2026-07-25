@@ -7,6 +7,9 @@ import { x402ResourceServer } from "@okxweb3/x402-express";
 import { OKXFacilitatorClient } from "@okxweb3/x402-core";
 import { ExactEvmScheme } from "@okxweb3/x402-evm/exact/server";
 import { config } from "./config.js";
+import { fetchAgent } from "./okx.js";
+import { tierMismatch } from "./pricing.js";
+import type { TierId } from "./types.js";
 
 const NETWORK = "eip155:196";
 const USDT0_XLAYER = "0x779ded0c9e1022225f8e0630b35a9b54be713736";
@@ -47,33 +50,9 @@ function buildPaidMiddleware(routeKey: string, description: string, priceUsd: st
   ) as unknown as Handler;
 }
 
-/**
- * Resolve what this specific request costs.
- *
- * The live-proof tier pays the demoed agent's own fee on top of our base, and
- * those fees differ per agent and per service, so the amount cannot be baked
- * into the route. The resolver runs before the challenge is issued and returns
- * the same number `get_quote` reports for the same arguments.
- */
-export type PriceResolver = (req: Request) => Promise<string>;
-
-export function paidRoute(routeKey: string, description: string, resolvePrice: PriceResolver): Handler {
-  return async (req, res, next) => {
+export function paidRoute(routeKey: string, description: string, priceUsd: string): Handler {
+  return (req, res, next) => {
     if (!x402Enabled()) return next();
-
-    let priceUsd: string;
-    try {
-      priceUsd = await resolvePrice(req);
-    } catch (err) {
-      // Pricing needs the target agent's metadata. If that lookup fails we
-      // cannot name an honest number, and charging a guessed one is worse than
-      // failing: the caller would pay for something we could not quote.
-      console.error("could not price the request:", err instanceof Error ? err.message : err);
-      res.status(503).json({
-        error: "could not read the target agent's services to price this request — try again shortly",
-      });
-      return;
-    }
 
     const hasProof =
       req.headers["payment-signature"] ||
@@ -82,13 +61,10 @@ export function paidRoute(routeKey: string, description: string, resolvePrice: P
       req.headers["x402-payment"];
 
     if (hasProof) {
-      // Keyed by price too: one middleware per (route, amount) pair, since the
-      // amount is now part of what the middleware verifies.
-      const cacheKey = `${routeKey}@${priceUsd}`;
-      let mw = paidCache.get(cacheKey);
+      let mw = paidCache.get(routeKey);
       if (!mw) {
         mw = buildPaidMiddleware(routeKey, description, priceUsd);
-        paidCache.set(cacheKey, mw);
+        paidCache.set(routeKey, mw);
       }
       return void mw(req, res, next);
     }
@@ -106,12 +82,8 @@ const FREE_TOOLS = new Set(["get_quota", "get_quote", "get_job", "preview_spec"]
  * the OKX listing validator — can complete the handshake and discover tools.
  * Gating the whole endpoint 402s the handshake itself, and the review times out.
  */
-export function mcpPaidRoute(
-  routeKey: string,
-  description: string,
-  resolvePrice: PriceResolver,
-): Handler {
-  const paid = paidRoute(routeKey, description, resolvePrice);
+export function mcpPaidRoute(routeKey: string, description: string, priceUsd: string): Handler {
+  const paid = paidRoute(routeKey, description, priceUsd);
   return (req, res, next) => {
     const body = req.body as { method?: string; params?: { name?: string } } | undefined;
     if (body?.method !== "tools/call") return next();
@@ -154,7 +126,7 @@ export function send402Challenge(
   res.status(402).json(challenge);
 }
 
-type ToolArgs = { agentId?: unknown; style?: unknown; jobId?: unknown };
+type ToolArgs = { agentId?: unknown; serviceId?: unknown; style?: unknown; jobId?: unknown };
 
 const VALID_STYLES = new Set(["terminal", "playful", "saas"]);
 
@@ -181,22 +153,48 @@ export function preflightError(tool: string, args: ToolArgs | undefined): string
   return null;
 }
 
-/** MCP preflight middleware: validates a tools/call body before the payment gate. */
-export function mcpPreflight() {
-  return (req: Request, res: Response, next: NextFunction): void => {
+/**
+ * MCP preflight middleware: validates a tools/call body before the payment gate.
+ *
+ * As well as malformed input, this rejects a service the tier cannot afford to
+ * call. That check needs the target agent's fees, so it is a network round trip
+ * — worth it, because the alternative is charging for a live-proof pitch and
+ * then delivering one without the live segment that defines it.
+ */
+export function mcpPreflight(tier: TierId) {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const body = req.body as
       | { method?: string; id?: unknown; params?: { name?: string; arguments?: ToolArgs } }
       | undefined;
     if (body?.method !== "tools/call") return next();
 
-    const err = preflightError(body?.params?.name ?? "", body?.params?.arguments);
-    if (err) {
+    const reject = (message: string): void => {
       res.status(400).json({
         jsonrpc: "2.0",
         id: body.id ?? null,
-        error: { code: -32602, message: `Rejected before payment: ${err}` },
+        error: { code: -32602, message: `Rejected before payment: ${message}` },
       });
-      return;
+    };
+
+    const err = preflightError(body?.params?.name ?? "", body?.params?.arguments);
+    if (err) return reject(err);
+
+    const args = body?.params?.arguments;
+    if (body?.params?.name === "generate_pitch" && args?.agentId != null) {
+      try {
+        const agent = await fetchAgent(String(args.agentId));
+        const serviceId = typeof args.serviceId === "string" ? args.serviceId : undefined;
+        const mismatch = tierMismatch(agent, tier, serviceId);
+        if (mismatch) return reject(mismatch);
+      } catch (lookupErr) {
+        // A lookup failure is ours, not the caller's — let the request through
+        // rather than refusing a job that may be perfectly payable. The pipeline
+        // retries the same lookup and reports honestly if it fails again.
+        console.warn(
+          "tier preflight could not read the agent:",
+          lookupErr instanceof Error ? lookupErr.message.split("\n")[0] : lookupErr,
+        );
+      }
     }
     next();
   };

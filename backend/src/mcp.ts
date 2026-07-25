@@ -11,7 +11,7 @@ import { buildPalette } from "./palette.js";
 import { buildSpec } from "./spec.js";
 import { jobStatus, TIERS, type TierSpec } from "./pipeline.js";
 import { x402Info } from "./x402.js";
-import { quoteAll } from "./pricing.js";
+import { optionsFor, TIER_PRICING } from "./pricing.js";
 import type { TierId, VisualStyle } from "./types.js";
 
 const AGENT_ID = z
@@ -112,12 +112,20 @@ function registerFreeTools(server: McpServer, defaultTier: TierId): void {
             includes: "motion-graphics pitch with narration, captions and music",
           },
           "live-proof": {
-            endpoint: "/pitch/live-proof",
-            price: `$${config.priceLiveProofUsd} + the demoed service's own fee`,
-            maxPassthrough: `$${config.maxPassthroughUsd}`,
+            endpoint: TIER_PRICING["live-proof"].endpoint,
+            price: `$${config.priceLiveProofUsd}`,
+            coversServicesUpTo: `$${TIER_PRICING["live-proof"].maxServiceFeeUsd.toFixed(2)}`,
             includes:
               "everything in Animated Pitch, plus a real screen recording of this agent " +
               "being opened and used on the OKX.ai marketplace, spliced into the middle",
+          },
+          "live-proof-plus": {
+            endpoint: TIER_PRICING["live-proof-plus"].endpoint,
+            price: `$${config.priceLiveProofPlusUsd}`,
+            coversServicesUpTo: `$${TIER_PRICING["live-proof-plus"].maxServiceFeeUsd.toFixed(2)}`,
+            includes:
+              "the same video as Live-Proof. The higher price buys the call itself: this tier is " +
+              "for agents whose own service costs more to invoke",
           },
         },
       }),
@@ -129,36 +137,34 @@ function registerFreeTools(server: McpServer, defaultTier: TierId): void {
       title: "Price a pitch for one agent",
       annotations: READ_ONLY,
       description:
-        "FREE. Price a pitch for a specific agent, one line per service that agent sells. " +
-        "The live-proof tier records a real paid call, so it costs our base plus that service's " +
-        "own fee — a $0.50 service and a $3 service do not cost the same to demo. " +
-        "ASK YOUR USER which service they want demonstrated when there is more than one, then " +
+        "FREE. List an agent's services and, for each, which endpoint can demo it and what that " +
+        "costs. The live tiers buy a real call to the service being filmed, so a $0.50 service and " +
+        "a $3 service are not served by the same tier — this tool tells you which endpoint to post " +
+        "to. ASK YOUR USER which service they want demonstrated when there is more than one, then " +
         "pass its serviceId to generate_pitch. Omitting serviceId picks the cheapest. " +
-        "Call this before paying: the total here is exactly what the 402 challenge will ask for.",
-      inputSchema: {
-        agentId: AGENT_ID,
-        tier: z
-          .enum(["animated", "live-proof"])
-          .optional()
-          .describe("Which tier to price. Defaults to the tier of the endpoint you are calling."),
-      },
+        "Always call this before paying: posting to the wrong tier is rejected without charge.",
+      inputSchema: { agentId: AGENT_ID },
     },
-    async ({ agentId, tier }) => {
+    async ({ agentId }) => {
       const agent = await fetchAgent(agentId);
-      const tierId = (tier ?? defaultTier) as TierId;
       return json({
         agentId: agent.agentId,
         agentName: agent.name,
-        tier: tierId,
         currency: "USDT0 on X Layer",
-        options: quoteAll(agent, tierId).map((q) => ({
-          serviceId: q.serviceId,
-          service: q.serviceName,
-          theirFee: `$${q.serviceFeeUsd.toFixed(2)}`,
-          ourBase: `$${q.baseUsd.toFixed(2)}`,
-          youPay: `$${q.totalUsd.toFixed(2)}`,
-          ...(q.liveCallSkipped ? { note: q.liveCallSkipped } : {}),
+        youAreCalling: TIER_PRICING[defaultTier].endpoint,
+        services: optionsFor(agent).map((o) => ({
+          serviceId: o.serviceId,
+          service: o.serviceName,
+          theirFee: `$${o.serviceFeeUsd.toFixed(2)}`,
+          ...(o.endpoint
+            ? { useEndpoint: o.endpoint, youPay: `$${o.priceUsd?.toFixed(2)}` }
+            : { unavailable: o.unsupported }),
         })),
+        animatedAlternative: {
+          endpoint: TIER_PRICING.animated.endpoint,
+          youPay: `$${TIER_PRICING.animated.priceUsd.toFixed(2)}`,
+          note: "No recorded call, so it works for any agent regardless of its service fees.",
+        },
       });
     },
   );

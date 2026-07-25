@@ -11,8 +11,8 @@ export interface AgentService {
   endpoint: string;
 }
 
-/** The two marketplace services this ASP sells. */
-export type TierId = "animated" | "live-proof";
+/** The three marketplace services this ASP sells, one endpoint each. */
+export type TierId = "animated" | "live-proof" | "live-proof-plus";
 
 export interface AgentProfile {
   agentId: string;
