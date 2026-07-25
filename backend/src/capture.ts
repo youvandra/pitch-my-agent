@@ -109,6 +109,16 @@ async function pressEsc(): Promise<void> {
 
 // ─── Window geometry (Quartz, read-only, no permission) ──────────────────────
 
+/**
+ * Logical width of the Claude sidebar, and the share of the window height taken
+ * by the greeting and recent-sessions block above the composer. Both are
+ * cropped away before the clip is used (see the crop below). The sidebar is a
+ * fixed point width rather than a fraction so resizing the window does not
+ * start revealing it.
+ */
+const SIDEBAR_PT = 330;
+const HEADER_FRACTION = 0.3;
+
 interface Geometry {
   x: number;
   y: number;
@@ -364,14 +374,10 @@ export async function captureLiveProof(jobId: string, agent: AgentProfile): Prom
     await pressEsc();
     await wait(500);
 
-    // Everything that changes window state happens BEFORE the camera rolls.
-    // A new chat clears the transcript and Cmd+B hides the sidebar; doing
-    // either on tape would put the operator's own chat history on screen for
-    // the frames it takes to disappear.
+    // Open the new chat BEFORE the camera rolls: on tape, the transition would
+    // show the previous conversation for the frames it takes to clear.
     await pressCmd("n");
     await wait(1200);
-    await pressCmd("b");
-    await wait(900);
 
     const geom = await claudeGeometry();
     const screenIndex = await resolveScreenIndex();
@@ -398,11 +404,18 @@ export async function captureLiveProof(jobId: string, agent: AgentProfile): Prom
     const dims = rec.dims();
     if (geom && dims && geom.logicalW > 0) {
       const ratio = dims.w / geom.logicalW;
+      // Frame the composer, not the whole window. The sidebar lists the
+      // operator's own conversations and the area above the composer carries
+      // their name and recent sessions — none of that belongs in a buyer's
+      // video, and no keyboard shortcut reliably hides it. Cropping is
+      // stateless, so it cannot silently stop working the way a toggle can.
+      const insetX = Math.min(SIDEBAR_PT, geom.w * 0.5);
+      const insetY = geom.h * HEADER_FRACTION;
       crop = {
-        x: Math.max(0, Math.round(geom.x * ratio)),
-        y: Math.max(0, Math.round(geom.y * ratio)),
-        w: Math.min(dims.w, Math.round(geom.w * ratio)),
-        h: Math.min(dims.h, Math.round(geom.h * ratio)),
+        x: Math.max(0, Math.round((geom.x + insetX) * ratio)),
+        y: Math.max(0, Math.round((geom.y + insetY) * ratio)),
+        w: Math.min(dims.w, Math.round((geom.w - insetX) * ratio)),
+        h: Math.min(dims.h, Math.round((geom.h - insetY) * ratio)),
       };
     }
     claudeRecorded = fs.existsSync(claudePath) && fs.statSync(claudePath).size > 10_000;
