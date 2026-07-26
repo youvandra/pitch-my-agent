@@ -1,7 +1,7 @@
 # OKX.AI Genesis Hackathon — Submission Draft (Pitch My Agent)
 
 Updated 2026-07-26 — reflects shipped state: **one A2MCP service** (`generate_pitch`
-paid at $2.00; `preview_spec`, `get_job`, `retry_job`, `get_quota` free), live at
+paid at $0.40; `preview_spec`, `get_job`, `retry_job`, `get_quota` free), live at
 **https://pitchokxai.web.id** with x402 v2 settling on X Layer. Narrated 1080p
 output, per-agent scene architecture, palette contract verified across 36 real
 marketplace avatars, licensed beat-locked soundtracks, and a staged x402 purchase
@@ -100,7 +100,7 @@ A2MCP
 ```
 PRIMARY
 - ASP builders shipping a new agent — the listing goes live with a trailer instead
-  of a paragraph, on the same day, for $2 instead of a day of manual editing.
+  of a paragraph, on the same day, for $0.40 instead of a day of manual editing.
 
 OTHERS
 - Marketplace discovery agents  — hand a user a watchable summary of an agent instead of a description
@@ -141,7 +141,7 @@ Pitch My Agent is an A2MCP ASP: send an agent ID, get a narrated
 💳 the centre scene stages the x402 purchase itself
 🔁 retry_job re-runs a failed render free — payment settles on accept
 
-$2 per pitch · x402 v2 · USDT0 on X Layer
+$0.40 per pitch · x402 v2 · USDT0 on X Layer
 
 Agent ID #[id] · pitchokxai.web.id
 
@@ -178,7 +178,7 @@ Built for @OKXAI Genesis Hackathon #OKXAI
                   chosen per agent, not recoloured from one layout."
 
 [1:08-1:20]  get_job returning the delivery payload; the finished mp4 playing.
-             VO: "Two dollars, settled on X Layer when the job is accepted.
+             VO: "Forty cents, settled on X Layer when the job is accepted.
                   If a render fails, retry_job re-runs it free."
 
 [1:20-1:30]  Landing page, agent ID card.
@@ -191,7 +191,7 @@ Built for @OKXAI Genesis Hackathon #OKXAI
 ## Submission checklist
 
 - [ ] `onchainos agent create` — identity registered, avatar uploaded
-- [ ] Service registered: A2MCP, fee `2`, endpoint `https://pitchokxai.web.id/pitch/animated`
+- [ ] Service registered: A2MCP, fee `0.4`, endpoint `https://pitchokxai.web.id/pitch/animated`
 - [ ] Agent activated and passing marketplace QA
 - [ ] Agent ID filled into this draft, the landing page footer and the X post
 - [ ] Demo video recorded and uploaded

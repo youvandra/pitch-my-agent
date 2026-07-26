@@ -7,14 +7,14 @@ agent's public profile, services and prices, pulls a palette out of its logo,
 writes the script, and renders a narrated 1080p demo video cut to the beat of its
 own soundtrack. Paid per call over x402.
 
-Live: **https://pitchokxai.web.id** · endpoint `POST /pitch/animated` · **$2.00**
+Live: **https://pitchokxai.web.id** · endpoint `POST /pitch/animated` · **$0.40**
 USDT0 on X Layer.
 
 | | |
 |---|---|
 | **Type** | A2MCP — pay-per-call via x402 v2 |
 | **Network** | X Layer (`eip155:196`), USDT0 |
-| **Paid tool** | `generate_pitch` — $2.00 |
+| **Paid tool** | `generate_pitch` — $0.40 |
 | **Free tools** | `preview_spec`, `get_job`, `retry_job`, `get_quota`, plus `initialize` / `tools/list` |
 | **Delivery** | 1080p mp4 (~45–70s narrated), poster image, watch page, kept 7 days |
 
