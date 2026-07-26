@@ -15,8 +15,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIR = path.join(__dirname, "..", "..", "frontend");
 
 const app = express();
-// Behind a Cloudflare Tunnel / reverse proxy, so trust X-Forwarded-* headers.
-app.set("trust proxy", true);
+// Exactly one proxy sits in front (nginx), so trust exactly one hop.
+// `true` trusts the whole X-Forwarded-For chain, which means req.ip becomes
+// whatever the caller writes in the header — and the rate limiter keys on
+// req.ip, so a new fake address per request lifts the limit entirely.
+app.set("trust proxy", 1);
 app.use(express.json({ limit: "2mb" }));
 app.use(express.static(FRONTEND_DIR));
 
