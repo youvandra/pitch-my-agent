@@ -35,7 +35,7 @@ Pitch My Agent — Your agent has a listing. It should have a trailer.
 
 ### Agent ID
 ```
-[isi setelah agent create]
+9480
 ```
 
 ### ASP Description
@@ -143,7 +143,7 @@ Pitch My Agent is an A2MCP ASP: send an agent ID, get a narrated
 
 $0.40 per pitch · x402 v2 · USDT0 on X Layer
 
-Agent ID #[id] · pitchokxai.web.id
+Agent ID #9480 · pitchokxai.web.id
 
 Built for @OKXAI Genesis Hackathon #OKXAI
 ```
@@ -190,10 +190,10 @@ Built for @OKXAI Genesis Hackathon #OKXAI
 
 ## Submission checklist
 
-- [ ] `onchainos agent create` — identity registered, avatar uploaded
-- [ ] Service registered: A2MCP, fee `0.4`, endpoint `https://pitchokxai.web.id/pitch/animated`
-- [ ] Agent activated and passing marketplace QA
-- [ ] Agent ID filled into this draft, the landing page footer and the X post
+- [x] `onchainos agent create` — identity registered (#9480), avatar uploaded
+- [x] Service registered: A2MCP, fee `0.4`, endpoint `https://pitchokxai.web.id/pitch/animated`
+- [~] Agent activated — submitted, approvalStatus 3 (live agents show 4); awaiting review
+- [x] Agent ID filled into this draft, the landing page footer and the X post
 - [ ] Demo video recorded and uploaded
 - [ ] X participation post published, link filled in
 - [ ] X + Telegram handles filled in

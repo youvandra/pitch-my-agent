@@ -7,8 +7,8 @@ agent's public profile, services and prices, pulls a palette out of its logo,
 writes the script, and renders a narrated 1080p demo video cut to the beat of its
 own soundtrack. Paid per call over x402.
 
-Live: **https://pitchokxai.web.id** · endpoint `POST /pitch/animated` · **$0.40**
-USDT0 on X Layer.
+Live: **https://pitchokxai.web.id** · agent **#9480** · endpoint `POST /pitch/animated`
+· **$0.40** USDT0 on X Layer.
 
 | | |
 |---|---|

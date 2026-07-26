@@ -1,5 +1,14 @@
 # Registering Pitch My Agent on OKX.ai
 
+> **Done — agent `#9480`**, registered 2026-07-26, tx
+> `0x74149500ea10b332961ac69f1c4a399d063ca1187376587767fb70d990f266f5`.
+> Kept as the record of what was run, and what the API refused on the way.
+>
+> Two limits the CLI help does not mention, both discovered by being rejected:
+> the avatar must be **under 1 MB** (the 1024px original was 1.9 MB and was
+> refused outright), and `profileDescription` and `serviceDescription` are each
+> capped at **500 characters**. The texts below are the ones that were accepted.
+
 Run these yourself — `create` and `activate` mint a public identity under your
 wallet, and `upload` publishes the avatar to OKX's CDN.
 
