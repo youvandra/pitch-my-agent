@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { config } from "./config.js";
 import { buildPitchServer } from "./mcp.js";
-import { mcpPaidRoute, mcpPreflight, send402Challenge, x402Info } from "./x402.js";
+import { mcpPaidRoute, mcpPreflight, paidRoute, probeFallback, warmFacilitator, x402Info } from "./x402.js";
 import { handleNativePaidCall, PAID_TOOLS } from "./native.js";
 import { rateLimit } from "./ratelimit.js";
 import { initStore, startCleanup, resolveOutputPath, getJob } from "./store.js";
@@ -104,15 +104,14 @@ for (const route of TIER_ROUTES) {
     route.path,
     rateLimit,
     mcpPreflight(),
-    mcpPaidRoute(`POST ${route.path}`, route.desc, route.price),
+    mcpPaidRoute(route.path, route.desc, route.price),
     handler,
   );
 
   // Marketplace validators probe a paid endpoint with a bare GET and expect the
-  // x402 challenge. Real MCP clients always POST.
-  app.get(route.path, (req, res) => {
-    send402Challenge(req, res, route.desc, route.price);
-  });
+  // x402 challenge. Real MCP clients always POST. The same SDK middleware
+  // answers the probe, so the challenge a validator sees is the facilitator's.
+  app.get(route.path, paidRoute(route.path, route.desc, route.price), probeFallback);
 
   app.all(route.path, (_req, res) => {
     res.status(405).json({
@@ -203,4 +202,12 @@ app.listen(config.port, () => {
   for (const r of TIER_ROUTES) {
     console.log(`  ${r.path} — $${r.price}, ${r.tier.durationSec}s`);
   }
+
+  // Sync with the OKX facilitator now, so the first listing probe meets an
+  // already-integrated seller. Logged, not fatal: a facilitator hiccup at boot
+  // must not take the whole service down — the middleware retries per request.
+  warmFacilitator().then(
+    () => console.log("  x402: facilitator sync OK"),
+    (err) => console.error("  x402: facilitator sync FAILED —", err?.message ?? err),
+  );
 });

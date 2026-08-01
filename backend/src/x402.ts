@@ -11,62 +11,86 @@ import { config } from "./config.js";
 
 const NETWORK = "eip155:196";
 const USDT0_XLAYER = "0x779ded0c9e1022225f8e0630b35a9b54be713736";
-const USDT0_DECIMALS = 6;
 
 type Handler = (req: Request, res: Response, next: NextFunction) => unknown;
 
 export const x402Enabled = (): boolean =>
   config.x402Mode !== "off" && !!config.x402PayTo;
 
-const paidCache = new Map<string, Handler>();
+/**
+ * One resource server for the whole process — the facilitator sync is per
+ * resource server, not per route, so every paid path must share it.
+ */
+let resourceServer: InstanceType<typeof x402ResourceServer> | null = null;
 
-function buildPaidMiddleware(routeKey: string, description: string, priceUsd: string): Handler {
-  const facilitator = new OKXFacilitatorClient({
-    apiKey: config.xlayerApiKey,
-    secretKey: config.xlayerSecretKey,
-    passphrase: config.xlayerPassphrase,
-    syncSettle: true,
-  });
-  const resourceServer = new x402ResourceServer(facilitator).register(
-    NETWORK,
-    new ExactEvmScheme(),
-  );
-  return paymentMiddleware(
-    {
-      [routeKey]: {
-        accepts: {
-          scheme: "exact",
-          price: `$${priceUsd}`,
-          network: NETWORK,
-          payTo: config.x402PayTo,
-        },
-        description,
-        mimeType: "application/json",
-      },
-    },
-    resourceServer,
-  ) as unknown as Handler;
+function getResourceServer(): InstanceType<typeof x402ResourceServer> {
+  if (!resourceServer) {
+    const facilitator = new OKXFacilitatorClient({
+      apiKey: config.xlayerApiKey,
+      secretKey: config.xlayerSecretKey,
+      passphrase: config.xlayerPassphrase,
+      syncSettle: true,
+    });
+    resourceServer = new x402ResourceServer(facilitator).register(
+      NETWORK,
+      new ExactEvmScheme(),
+    );
+  }
+  return resourceServer;
 }
 
+/**
+ * Sync with the OKX facilitator at boot rather than on the first paid request,
+ * so the facilitator sees this resource server as an integrated seller before
+ * any listing probe arrives, and bad X Layer credentials fail at deploy time.
+ */
+export async function warmFacilitator(): Promise<void> {
+  if (!x402Enabled()) return;
+  await getResourceServer().initialize();
+}
+
+const paidCache = new Map<string, Handler>();
+
+/**
+ * x402 gate for one route, served entirely by the official OKX SDK.
+ *
+ * The SDK builds the 402 itself, from requirements negotiated with the
+ * facilitator — including the `error` field and any declared extensions that a
+ * hand-rolled challenge cannot reproduce. Never bypass it for unpaid requests:
+ * an endpoint that answers probes with its own challenge looks un-integrated to
+ * the marketplace validator, which is what delisted the sibling ASPs with "not
+ * integrated with the official OKX Payment SDK".
+ *
+ * `routeKey` is a bare path (no HTTP verb) so one middleware and one set of
+ * requirements answers both the validator's GET probe and the real POST call.
+ */
 export function paidRoute(routeKey: string, description: string, priceUsd: string): Handler {
   return (req, res, next) => {
     if (!x402Enabled()) return next();
 
-    const hasProof =
-      req.headers["payment-signature"] ||
-      req.headers["x-payment"] ||
-      req.headers["x402-authorization"] ||
-      req.headers["x402-payment"];
-
-    if (hasProof) {
-      let mw = paidCache.get(routeKey);
-      if (!mw) {
-        mw = buildPaidMiddleware(routeKey, description, priceUsd);
-        paidCache.set(routeKey, mw);
-      }
-      return void mw(req, res, next);
+    let mw = paidCache.get(routeKey);
+    if (!mw) {
+      mw = paymentMiddleware(
+        {
+          [routeKey]: {
+            accepts: {
+              scheme: "exact",
+              price: `$${priceUsd}`,
+              network: NETWORK,
+              payTo: config.x402PayTo,
+            },
+            description,
+            mimeType: "application/json",
+          },
+        },
+        getResourceServer(),
+      ) as unknown as Handler;
+      paidCache.set(routeKey, mw);
     }
-    return send402Challenge(req, res, description, priceUsd);
+    // The SDK middleware is async and routes its own failures to next(error);
+    // .catch is the backstop so a rejection can never surface as an unhandled
+    // promise rejection and take the process down.
+    return void Promise.resolve(mw(req, res, next)).catch(next);
   };
 }
 
@@ -90,38 +114,14 @@ export function mcpPaidRoute(routeKey: string, description: string, priceUsd: st
   };
 }
 
-export function send402Challenge(
-  req: Request,
-  res: Response,
-  description: string,
-  priceUsd: string,
-): void {
-  const amount = Math.round(Number(priceUsd) * 10 ** USDT0_DECIMALS).toString();
-  const challenge = {
-    x402Version: 2,
-    resource: {
-      url: `${req.protocol}://${req.get("host")}${req.originalUrl}`,
-      description,
-      mimeType: "application/json",
-    },
-    accepts: [
-      {
-        scheme: "exact",
-        network: NETWORK,
-        amount,
-        asset: USDT0_XLAYER,
-        payTo: config.x402PayTo,
-        // Must match the window the OKX facilitator accepts for EIP-3009
-        // authorizations on X Layer. A longer window makes the buyer sign a
-        // validBefore the facilitator rejects, so verification fails with an
-        // empty 402 before settling.
-        maxTimeoutSeconds: 300,
-        extra: { name: "USD₮0", version: "1" },
-      },
-    ],
-  };
-  res.setHeader("PAYMENT-REQUIRED", Buffer.from(JSON.stringify(challenge)).toString("base64"));
-  res.status(402).json(challenge);
+/**
+ * Terminal handler for a validator's bare GET probe, mounted behind the SDK
+ * middleware. An unpaid probe never reaches it — the SDK already sent 402.
+ * Answering 402 here means a GET that does carry payment is not charged: a
+ * >=400 status makes the SDK skip settlement, and a bare GET delivers nothing.
+ */
+export function probeFallback(_req: Request, res: Response): void {
+  res.status(402).json({});
 }
 
 type ToolArgs = { agentId?: unknown; style?: unknown; jobId?: unknown };
