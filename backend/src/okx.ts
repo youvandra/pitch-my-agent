@@ -53,11 +53,44 @@ function str(v: unknown): string {
 }
 
 /**
+ * A target that cannot be turned into a video. `not_found` and `no_services`
+ * are different failures and must read differently: `service-list` returns an
+ * empty entry for BOTH a nonexistent id and a live User-role agent that sells
+ * nothing, so reporting "not found" for the latter is simply wrong.
+ */
+export class UnpitchableAgentError extends Error {
+  constructor(
+    message: string,
+    readonly reason: "not_found" | "no_services",
+  ) {
+    super(message);
+    this.name = "UnpitchableAgentError";
+  }
+}
+
+/** Does this agent id exist at all? Used only to explain an empty service-list. */
+async function agentExists(agentId: string): Promise<boolean> {
+  try {
+    const data = (await onchainos(["agent", "get-agents", "--agent-ids", String(agentId)])) as
+      | Array<Record<string, unknown>>
+      | undefined;
+    return Array.isArray(data) && data.length > 0;
+  } catch {
+    // Can't tell — let the caller report the softer of the two failures.
+    return false;
+  }
+}
+
+/**
  * Fetch an agent's public profile and the services it sells.
  *
  * `service-list` already embeds the agent info, so one call covers both. The
  * services carry the exact name/fee/endpoint shown on the marketplace listing —
  * which is what the video's pricing scene should quote.
+ *
+ * Throws UnpitchableAgentError when there is nothing to pitch. Callers gate on
+ * this BEFORE taking payment — a video cannot be built from an empty profile,
+ * so charging for one would be charging for a render that cannot happen.
  */
 export async function fetchAgent(agentId: string): Promise<AgentProfile> {
   const data = (await onchainos(["agent", "service-list", "--agent-id", String(agentId)])) as
@@ -65,7 +98,16 @@ export async function fetchAgent(agentId: string): Promise<AgentProfile> {
     | undefined;
 
   const entry = Array.isArray(data) ? data[0] : undefined;
-  if (!entry?.agentInfo) throw new Error(`Agent ${agentId} not found on the marketplace.`);
+  if (!entry?.agentInfo) {
+    if (await agentExists(String(agentId))) {
+      throw new UnpitchableAgentError(
+        `Agent ${agentId} has no services to pitch — it exists on the marketplace but sells nothing, ` +
+          `so there is no offering to build a demo video from. Pick an ASP-role agent with at least one service.`,
+        "no_services",
+      );
+    }
+    throw new UnpitchableAgentError(`Agent ${agentId} not found on the marketplace.`, "not_found");
+  }
 
   const info = entry.agentInfo;
   const services: AgentService[] = (entry.list ?? []).map((s) => ({
@@ -76,6 +118,14 @@ export async function fetchAgent(agentId: string): Promise<AgentProfile> {
     fee: str(s.fee),
     endpoint: str(s.endpoint),
   }));
+
+  if (services.length === 0) {
+    throw new UnpitchableAgentError(
+      `Agent ${agentId} has no services to pitch — it is listed but has no marketplace services, ` +
+        `so there is no offering to build a demo video from.`,
+      "no_services",
+    );
+  }
 
   return {
     agentId: String(agentId),

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { config } from "./config.js";
 import { buildPitchServer } from "./mcp.js";
-import { mcpPaidRoute, mcpPreflight, paidRoute, probeFallback, warmFacilitator, x402Info } from "./x402.js";
+import { mcpPaidRoute, mcpPreflight, normalizeToolCall, paidRoute, probeFallback, targetAgentGate, warmFacilitator, x402Info } from "./x402.js";
 import { handleNativePaidCall, PAID_TOOLS } from "./native.js";
 import { rateLimit } from "./ratelimit.js";
 import { initStore, startCleanup, resolveOutputPath, getJob } from "./store.js";
@@ -103,7 +103,13 @@ for (const route of TIER_ROUTES) {
   app.post(
     route.path,
     rateLimit,
+    // Order matters, and every step here runs BEFORE the payment gate:
+    // read a plain REST body as a tool call, reject a malformed one, then
+    // reject a target that cannot be rendered. Nothing that gets past these
+    // can be charged for and then fail.
+    normalizeToolCall(),
     mcpPreflight(),
+    targetAgentGate(),
     mcpPaidRoute(route.path, route.desc, route.price),
     handler,
   );

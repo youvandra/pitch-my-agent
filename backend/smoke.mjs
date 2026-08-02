@@ -1,0 +1,11 @@
+import "dotenv/config";
+import { initStore, getJob } from "./dist/store.js";
+import { runPipeline, TIERS } from "./dist/pipeline.js";
+initStore();
+const jobId = "smoke_" + Date.now();
+console.log("rendering", jobId);
+const t0 = Date.now();
+await runPipeline(jobId, { agentId: "6006" }, TIERS.animated);
+const job = getJob(jobId);
+console.log("stage:", job?.stage, "| error:", job?.error ?? "none", "|", Math.round((Date.now() - t0) / 1000) + "s");
+console.log("video:", job?.delivery?.videoUrl ?? "NONE");

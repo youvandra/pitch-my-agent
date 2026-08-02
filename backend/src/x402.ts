@@ -7,6 +7,7 @@ import { x402ResourceServer } from "@okxweb3/x402-express";
 import { OKXFacilitatorClient } from "@okxweb3/x402-core";
 import { ExactEvmScheme } from "@okxweb3/x402-evm/exact/server";
 import { config } from "./config.js";
+import { fetchAgent, UnpitchableAgentError } from "./okx.js";
 
 
 const NETWORK = "eip155:196";
@@ -149,6 +150,87 @@ export function preflightError(tool: string, args: ToolArgs | undefined): string
     return null;
   }
   return null;
+}
+
+/**
+ * Read a plain REST body as a generate_pitch call.
+ *
+ * The facilitator replays a paid request with whatever body the buyer sent. A
+ * buyer who paid first and then replayed `{"agentId":"8421"}` used to get a
+ * JSON-RPC parse error — `mcpPaidRoute` waves through anything whose method
+ * isn't `tools/call`, so the request bypassed the payment gate entirely and hit
+ * the transport, which rejected it after their money had already moved. Reading
+ * the obvious shape removes that whole class: a paid body carrying an agentId
+ * is a pitch request, envelope or no envelope.
+ *
+ * Only a body with no `method` at all is rewritten, so MCP handshake traffic
+ * (initialize, tools/list, notifications/*) is untouched.
+ */
+export function normalizeToolCall() {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    const body = req.body as Record<string, unknown> | undefined;
+    if (!body || typeof body !== "object" || Array.isArray(body)) return next();
+    if (typeof body.method === "string") return next();
+    if (body.agentId === undefined) return next();
+
+    const { agentId, style, voice } = body as { agentId?: unknown; style?: unknown; voice?: unknown };
+    req.body = {
+      jsonrpc: "2.0",
+      id: body.id ?? null,
+      method: "tools/call",
+      params: {
+        name: typeof body.tool === "string" ? body.tool : "generate_pitch",
+        arguments: { agentId, ...(style !== undefined ? { style } : {}), ...(voice !== undefined ? { voice } : {}) },
+      },
+    };
+    next();
+  };
+}
+
+// Tools whose target agent must be real and sellable before anything else runs.
+const AGENT_GATED_TOOLS = new Set(["generate_pitch", "preview_spec"]);
+
+/**
+ * Refuse an unrenderable target BEFORE the payment gate.
+ *
+ * A video is built out of the target's profile, services and prices. An agent
+ * with none of those cannot produce one, so accepting payment for it bills the
+ * buyer for a render that can never succeed. The same gate covers the free
+ * preview and the paid render, so the preview's verdict is the render's verdict.
+ */
+export function targetAgentGate() {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const body = req.body as
+      | { method?: string; id?: unknown; params?: { name?: string; arguments?: { agentId?: unknown } } }
+      | undefined;
+    if (body?.method !== "tools/call") return next();
+    if (!AGENT_GATED_TOOLS.has(body.params?.name ?? "")) return next();
+
+    const agentId = body.params?.arguments?.agentId;
+    // Shape problems are mcpPreflight's job; this gate only judges the target.
+    if (typeof agentId !== "string" && typeof agentId !== "number") return next();
+
+    try {
+      await fetchAgent(String(agentId));
+      next();
+    } catch (err) {
+      if (err instanceof UnpitchableAgentError) {
+        res.status(400).json({
+          jsonrpc: "2.0",
+          id: body.id ?? null,
+          error: { code: -32602, message: `Rejected before payment: ${err.message}`, data: { reason: err.reason, charged: false } },
+        });
+        return;
+      }
+      // Couldn't reach the marketplace — refuse rather than charge on a guess.
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(503).json({
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        error: { code: -32000, message: `Could not verify the target agent — not charged: ${message}`, data: { charged: false } },
+      });
+    }
+  };
 }
 
 /** MCP preflight middleware: validates a tools/call body before the payment gate. */
